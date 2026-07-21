@@ -2,40 +2,51 @@
 
 [Русский](README.md) · **English**
 
-<img src="icons/icon-128.png" width="88" alt="">
+</div>
 
-# Quick Translate
+<img src="docs/hero.png" alt="Quick Translate — select text on any page and get a translation">
 
-**Select text on any page — get a Russian translation.**
-A Manifest V3 Chrome extension powered by the OpenAI API.
+<div align="center">
 
-[**Download the latest release**](https://github.com/StrangerOfDawah/quick-translate/releases/latest)
+[**Download the latest release**](https://github.com/StrangerOfDawah/quick-translate/releases/latest) · Chrome · Manifest V3 · OpenAI API
 
 </div>
 
-<br>
-
-<img src="docs/popup-text.png" alt="Translating a selected paragraph">
+> The interface is in Russian and the extension translates **into** Russian — the source language is detected automatically. To target another language, change `targetLang` in `DEFAULTS` inside `background.js` and `options.js`.
 
 <br>
 
-## Features
+## No waiting for the translation
 
-**The translation streams in as it is generated.** The response arrives over SSE, so the first words show up in about half a second — no waiting for the model to finish the whole paragraph.
+The response streams over SSE: the first words show up in about half a second while the model is still writing the rest. On a long paragraph that's the difference between staring at a spinner and reading right away.
 
-**Single words are translated in context.** Select one word and the extension picks up the surrounding sentence, then asks for the translation that fits *that* sentence. Other common meanings are listed underneath.
+<img src="docs/feature-stream.png" alt="Three stages of a translation appearing as it is generated">
 
-<img src="docs/popup-word.png" alt="Translating a word in context">
+Close the card mid-translation and the request aborts — unfinished tokens aren't billed.
 
-In `I went to the **bank** to deposit a check` you get «банк»; in `We sat on the river **bank**` you get «берег».
+<br>
 
-**Dark mode** is detected automatically.
+## One word, the right meaning
 
-<img src="docs/popup-word-dark.png" alt="Dark mode">
+Selected a single word? The extension picks up the surrounding sentence and asks for the translation that fits *that* sentence. Other common meanings are listed underneath, in case you needed a different one.
 
-**Resizable.** `Cmd`/`Ctrl` + scroll over the card changes the scale, the corner grip resizes it, and a double-click on the grip resets both. Your settings apply on every page.
+<img src="docs/feature-context.png" alt="The word bank in two contexts: банк and берег">
 
-**Site styles can't break it** — the card lives in a Shadow DOM, so it looks the same everywhere.
+The card lives in a Shadow DOM, so site styles can't break it, and it follows the page's light or dark theme.
+
+<br>
+
+## Sized for your eyes
+
+<img src="docs/feature-size.png" alt="The card at 100% and 160% scale">
+
+The whole card scales, not just the font — padding, buttons and icons grow with the text. The corner grip resizes it, a double-click resets everything. The setting persists across every page.
+
+<br>
+
+## One key and you're done
+
+<img src="docs/feature-options.png" alt="Extension settings page">
 
 <br>
 
@@ -52,7 +63,7 @@ The extension isn't on the Chrome Web Store, hence the manual install. Chrome wi
 
 <br>
 
-## Setup
+## OpenAI key
 
 You need an OpenAI API key. This is **not** a ChatGPT Plus subscription — that gives no programmatic access. The API is billed separately, per use.
 
@@ -60,13 +71,7 @@ You need an OpenAI API key. This is **not** a ChatGPT Plus subscription — that
 2. Click the extension icon to open its settings
 3. Paste the key and hit **Проверить ключ** (Test key)
 
-<img src="docs/options.png" alt="Settings page">
-
-There is no Save button — everything saves itself.
-
 **On cost.** The default model is `gpt-4o-mini`, the cheapest one. A paragraph costs hundredths of a cent, and $5 of credit lasts a long time. Track spending at [platform.openai.com/usage](https://platform.openai.com/usage), where you can also set a monthly limit.
-
-> **Note on language.** The interface is in Russian, and the extension translates *into* Russian — the source language is detected automatically. To translate into a different language, change `targetLang` in `DEFAULTS` inside `background.js` and `options.js`.
 
 <br>
 
@@ -77,6 +82,7 @@ There is no Save button — everything saves itself.
 | Keyboard shortcut | Select text → <kbd>⌘</kbd><kbd>⇧</kbd><kbd>Y</kbd> (Mac) or <kbd>Ctrl</kbd><kbd>⇧</kbd><kbd>Y</kbd> (Windows) |
 | Context menu | Select text → right-click → «Перевести на русский» |
 | Automatic | Enable the toggle in settings — translates on any mouse selection |
+| Scale | <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + scroll over the card |
 
 In the card: the icon button copies the translation, «Оригинал» expands the source text. Close it with <kbd>Esc</kbd>, the ×, a click outside, or by scrolling.
 
@@ -96,16 +102,14 @@ You can rebind the shortcut at `chrome://extensions/shortcuts`. If it doesn't wo
 
 The key is stored in `chrome.storage.local` and only ever sent to `api.openai.com`. No analytics, no third-party servers.
 
-Repeat translations of the same fragment come from an in-memory cache in the service worker (last 200) and cost nothing. Closing the card mid-translation aborts the request, so unfinished output isn't billed.
-
-Selections are capped at 5000 characters so an accidental <kbd>⌘</kbd><kbd>A</kbd> doesn't send a whole page to the API. Change `MAX_CHARS` in `content.js`.
+Repeat translations of the same fragment come from an in-memory cache in the service worker (last 200) and cost nothing. Selections are capped at 5000 characters so an accidental <kbd>⌘</kbd><kbd>A</kbd> doesn't send a whole page to the API.
 
 <br>
 
 ## Limitations
 
 - Works only where Chrome lets extensions run scripts: the card won't appear on `chrome://` pages, the Chrome Web Store, or other extensions' pages
-- The target language is fixed to Russian on purpose — the value goes straight into the system prompt, so there's no free-text field. Change it in `DEFAULTS` in `background.js` and `options.js`
+- The target language is fixed to Russian on purpose — the value goes straight into the system prompt, so there's no free-text field
 - After editing the code, press Reload on the extension card in `chrome://extensions` and refresh open tabs
 
 <br>
