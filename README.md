@@ -8,7 +8,7 @@
 
 <div align="center">
 
-[**Скачать последнюю версию**](https://github.com/StrangerOfDawah/quick-translate/releases/latest) · Chrome · Manifest V3 · OpenAI API · [Конфиденциальность](PRIVACY.md)
+[**Скачать последнюю версию**](https://github.com/StrangerOfDawah/sensemark/releases/latest) · Chrome · Manifest V3 · OpenAI API · [Конфиденциальность](PRIVACY.md)
 
 </div>
 
@@ -50,7 +50,7 @@
 
 ## Установка
 
-1. Скачайте архив со страницы [**Releases**](https://github.com/StrangerOfDawah/quick-translate/releases/latest) и распакуйте
+1. Скачайте архив со страницы [**Releases**](https://github.com/StrangerOfDawah/sensemark/releases/latest) и распакуйте
 2. Откройте `chrome://extensions`
 3. Включите **Режим разработчика** — тумблер справа сверху
 4. Нажмите **Загрузить распакованное расширение** и выберите распакованную папку
