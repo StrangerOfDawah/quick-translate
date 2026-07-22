@@ -10,6 +10,8 @@
   const MULTILINGUAL_MARKER = "[[multilingual]]";
   const SKIP_MARKER = "[[skip]]";
   const LANGUAGE_MARKER = /^\[\[lang\s*:\s*(.+?)\]\]$/i;
+  const SCRIPT_LANGUAGE_MARKER =
+    /^\[\[script\s*:\s*([^|\]]+)\s*\|\s*lang\s*:\s*(.+?)\]\]$/i;
 
   function afterFirstLine(text) {
     const newline = text.indexOf("\n");
@@ -22,14 +24,18 @@
     let current = null;
 
     for (const rawLine of lines) {
-      const marker = rawLine.trim().match(LANGUAGE_MARKER);
+      const scriptMarker = rawLine.trim().match(SCRIPT_LANGUAGE_MARKER);
+      const languageMarker = rawLine.trim().match(LANGUAGE_MARKER);
+      const marker = scriptMarker || languageMarker;
       if (marker) {
         if (current) {
           current.text = current.lines.join("\n").trim();
           delete current.lines;
           sections.push(current);
         }
-        current = { language: marker[1].trim(), lines: [] };
+        current = scriptMarker
+          ? { script: scriptMarker[1].trim(), language: scriptMarker[2].trim(), lines: [] }
+          : { script: "", language: languageMarker[1].trim(), lines: [] };
       } else if (current) {
         current.lines.push(rawLine);
       }

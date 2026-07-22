@@ -8,6 +8,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, () => {
   const TRANSLATION_MARKER = "[[translation]]";
   const REFERENCE_MARKER = "[[reference]]";
+  const SKIP_MARKER = "[[skip]]";
 
   function cleanLines(text) {
     return String(text || "")
@@ -50,12 +51,21 @@
   }
 
   function parse(text) {
+    const value = String(text || "").trim().toLowerCase();
+    const markers = [TRANSLATION_MARKER, REFERENCE_MARKER, SKIP_MARKER];
+    if (value && markers.some((marker) => marker.startsWith(value) && marker !== value)) {
+      return { mode: "pending", main: "", category: "", detail: "" };
+    }
+
     const lines = cleanLines(text);
     if (!lines.length) return { mode: "pending", main: "", category: "", detail: "" };
 
     const first = lines[0].toLowerCase();
     if (first.startsWith("[[") && !first.endsWith("]]")) {
       return { mode: "pending", main: "", category: "", detail: "" };
+    }
+    if (first === SKIP_MARKER) {
+      return { mode: "skip", main: "", category: "", detail: "", detailLabel: "" };
     }
     if (first === TRANSLATION_MARKER) return parseTranslation(lines.slice(1));
     if (first === REFERENCE_MARKER) return parseReference(lines.slice(1));
@@ -67,5 +77,5 @@
     return parseTranslation(lines);
   }
 
-  return { parse, TRANSLATION_MARKER, REFERENCE_MARKER };
+  return { parse, TRANSLATION_MARKER, REFERENCE_MARKER, SKIP_MARKER };
 });

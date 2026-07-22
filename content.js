@@ -5,8 +5,9 @@
   const parseWordResponse = globalThis.SensemarkWordResponse?.parse;
   const parseTextResponse = globalThis.SensemarkTextResponse?.parse;
   const isRussianOnly = globalThis.SensemarkLanguageDetection?.isRussianOnly;
+  const detectScripts = globalThis.SensemarkLanguageDetection?.detectScripts;
   const hasMultipleScripts = globalThis.SensemarkLanguageDetection?.hasMultipleScripts;
-  if (!parseWordResponse || !parseTextResponse || !isRussianOnly || !hasMultipleScripts) {
+  if (!parseWordResponse || !parseTextResponse || !isRussianOnly || !detectScripts || !hasMultipleScripts) {
     console.error("Sensemark: response helpers are unavailable.");
     return;
   }
@@ -120,7 +121,7 @@
     const wordMode = isShort(text) && !hasMultipleScripts(text);
     const context = wordMode ? extractContext(range, text) : null;
 
-    return { text, rect, context, wordMode };
+    return { text, rect, context, wordMode, sourceScripts: detectScripts(text) };
   }
 
   function isShort(text) {
@@ -247,13 +248,7 @@
           beginStreamCard(info.text, info.wordMode);
           started = true;
         }
-        const action = updateStream(message.text);
-        if (action === "skip") {
-          release();
-          port.disconnect();
-          close();
-          return;
-        }
+        updateStream(message.text);
         position(lastRect);
         if (message.type === "done") {
           finalizeStream();
@@ -278,7 +273,8 @@
       type: "start",
       text: info.text,
       context: info.context,
-      wordMode: info.wordMode
+      wordMode: info.wordMode,
+      sourceScripts: info.sourceScripts
     });
   }
 
@@ -899,7 +895,9 @@
     if (!streamState.wordMode) {
       const parsed = parseTextResponse(text);
       if (parsed.mode === "pending") return;
-      if (parsed.mode === "skip") return "skip";
+      // [[skip]] — ошибочный ответ модели: background автоматически запросит
+      // исправление. Метку пользователю не показываем.
+      if (parsed.mode === "skip") return;
 
       if (parsed.mode === "multilingual") {
         setCardPresentation("multilingual");
@@ -921,7 +919,7 @@
     }
 
     const parsed = parseWordResponse(text);
-    if (parsed.mode === "pending") return;
+    if (parsed.mode === "pending" || parsed.mode === "skip") return;
 
     if (parsed.mode === "reference") {
       setCardPresentation("reference");

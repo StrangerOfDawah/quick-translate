@@ -46,19 +46,85 @@ function loadBackground() {
 
 test("text prompt auto-detects the source language", () => {
   const { buildTextMessages } = loadBackground();
-  const prompt = buildTextMessages("مرحبا", "русский")[0].content;
+  const prompt = buildTextMessages("مرحبا", "русский", ["Arabic"])[0].content;
 
   assert.match(prompt, /Самостоятельно определи язык каждого предложения/);
   assert.match(prompt, /Не считай английский языком по умолчанию/);
-  assert.match(prompt, /\[\[skip\]\]/);
+  assert.match(prompt, /Метка \[\[skip\]\] запрещена/);
   assert.match(prompt, /\[\[text\]\]/);
-  assert.match(prompt, /\[\[multilingual\]\]/);
   assert.match(prompt, /Переводи только фрагменты не на целевом языке/);
+});
+
+test("multiscript prompt requires a section for every detected script", () => {
+  const { buildTextMessages } = loadBackground();
+  const prompt = buildTextMessages("Hello مرحبا", "русский", ["Latin", "Arabic"])[0]
+    .content;
+
+  assert.match(prompt, /Latin, Arabic/);
+  assert.match(prompt, /\[\[multilingual\]\]/);
+  assert.match(prompt, /\[\[script:Latin\|lang:/);
+  assert.match(prompt, /для КАЖДОЙ письменности/);
+});
+
+test("response validation rejects skip and missing script sections", () => {
+  const { responseIssue } = loadBackground();
+
+  assert.match(responseIssue("[[skip]]", true, ["Arabic"]), /запрещённую метку/);
+  assert.match(
+    responseIssue(
+      "[[multilingual]]\n[[script:Latin|lang:английский]]\nПеревод.",
+      false,
+      ["Latin", "Arabic"]
+    ),
+    /Arabic/
+  );
+  assert.match(
+    responseIssue(
+      "[[multilingual]]\n" +
+        "[[script:Latin|lang:английский]]\nПеревод.\n" +
+        "[[script:Arabic|lang:арабский]]\n",
+      false,
+      ["Latin", "Arabic"]
+    ),
+    /Arabic/
+  );
+  assert.equal(
+    responseIssue(
+      "[[multilingual]]\n" +
+        "[[script:Latin|lang:английский]]\nПеревод.\n" +
+        "[[script:Arabic|lang:арабский]]\nДругой перевод.",
+      false,
+      ["Latin", "Arabic"]
+    ),
+    ""
+  );
+});
+
+test("repair request replaces an invalid skip response", async () => {
+  const background = loadBackground();
+  background.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content: "[[translation]]\nбогобоязненные" } }]
+    })
+  });
+
+  const repaired = await background.repairResponse(
+    { apiKey: "test-key", model: "gpt-4o-mini" },
+    [{ role: "system", content: "Переведи." }],
+    "[[skip]]",
+    "Запрещённая метка.",
+    true,
+    ["Arabic"],
+    new AbortController().signal
+  );
+
+  assert.equal(repaired, "[[translation]]\nбогобоязненные");
 });
 
 test("word prompt defines a safe unknown-term response", () => {
   const { buildWordMessages } = loadBackground();
-  const messages = buildWordMessages("Sensemark", null, "русский");
+  const messages = buildWordMessages("Sensemark", null, "русский", ["Latin"]);
   const prompt = messages[0].content;
 
   assert.match(prompt, /«Why» — обычное английское слово/);
@@ -66,6 +132,7 @@ test("word prompt defines a safe unknown-term response", () => {
   assert.match(prompt, /\[\[reference\]\]/);
   assert.match(prompt, /Заглавная буква сама по себе НЕ означает/);
   assert.match(prompt, /Не выдумывай значения и факты/);
+  assert.match(prompt, /письменность выделения: Latin/);
   assert.match(messages[1].content, /Контекст не предоставлен/);
 });
 

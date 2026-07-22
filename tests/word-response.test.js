@@ -24,7 +24,12 @@ test("parses a reference explanation as a separate response type", () => {
 });
 
 test("hides an incomplete streaming marker", () => {
+  assert.equal(parse("[").mode, "pending");
   assert.equal(parse("[[translat").mode, "pending");
+});
+
+test("never exposes an unexpected skip marker as a translation", () => {
+  assert.equal(parse("[[skip]]").mode, "skip");
 });
 
 test("keeps compatibility with the previous unknown-word format", () => {

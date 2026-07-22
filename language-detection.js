@@ -8,31 +8,42 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, () => {
   const RUSSIAN_LETTER = /^[А-Яа-яЁё]$/u;
   const LETTER = /^\p{L}$/u;
-  const SCRIPT_PATTERNS = [
-    /\p{Script=Latin}/u,
-    /\p{Script=Cyrillic}/u,
-    /\p{Script=Arabic}/u,
-    /\p{Script=Han}/u,
-    /\p{Script=Hiragana}/u,
-    /\p{Script=Katakana}/u,
-    /\p{Script=Hangul}/u,
-    /\p{Script=Hebrew}/u,
-    /\p{Script=Greek}/u,
-    /\p{Script=Devanagari}/u
+  const SCRIPT_DEFINITIONS = [
+    ["Latin", /\p{Script=Latin}/u],
+    ["Cyrillic", /\p{Script=Cyrillic}/u],
+    ["Arabic", /\p{Script=Arabic}/u],
+    ["Han", /\p{Script=Han}/u],
+    ["Hiragana", /\p{Script=Hiragana}/u],
+    ["Katakana", /\p{Script=Katakana}/u],
+    ["Hangul", /\p{Script=Hangul}/u],
+    ["Hebrew", /\p{Script=Hebrew}/u],
+    ["Greek", /\p{Script=Greek}/u],
+    ["Devanagari", /\p{Script=Devanagari}/u]
   ];
 
-  function letterScripts(text) {
+  function detectScripts(text) {
     const scripts = new Set();
     for (const char of String(text || "")) {
       if (!LETTER.test(char)) continue;
-      const index = SCRIPT_PATTERNS.findIndex((pattern) => pattern.test(char));
-      scripts.add(index === -1 ? "other" : index);
+      const definition = SCRIPT_DEFINITIONS.find(([, pattern]) => pattern.test(char));
+      scripts.add(definition?.[0] || "Other");
     }
-    return scripts;
+    if (scripts.has("Hiragana") || scripts.has("Katakana")) {
+      scripts.delete("Han");
+      scripts.delete("Hiragana");
+      scripts.delete("Katakana");
+      scripts.add("Japanese");
+    }
+    if (scripts.has("Hangul")) {
+      scripts.delete("Han");
+      scripts.delete("Hangul");
+      scripts.add("Korean");
+    }
+    return [...scripts];
   }
 
   function hasMultipleScripts(text) {
-    return letterScripts(text).size > 1;
+    return detectScripts(text).length > 1;
   }
 
   function isRussianOnly(text, detection = null) {
@@ -50,5 +61,5 @@
     return true;
   }
 
-  return { hasMultipleScripts, isRussianOnly };
+  return { detectScripts, hasMultipleScripts, isRussianOnly };
 });

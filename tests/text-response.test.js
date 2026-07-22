@@ -15,20 +15,26 @@ test("parses multilingual sections in their original order", () => {
   assert.deepEqual(
     parse(
       "[[multilingual]]\n" +
-        "[[lang:русский]]\nПривет!\n" +
-        "[[lang:английский]]\nКак дела?\n" +
-        "[[lang:арабский]]\nДобро пожаловать."
+        "[[script:Cyrillic|lang:русский]]\nПривет!\n" +
+        "[[script:Latin|lang:английский]]\nКак дела?\n" +
+        "[[script:Arabic|lang:арабский]]\nДобро пожаловать."
     ),
     {
       mode: "multilingual",
       text: "",
       sections: [
-        { language: "русский", text: "Привет!" },
-        { language: "английский", text: "Как дела?" },
-        { language: "арабский", text: "Добро пожаловать." }
+        { script: "Cyrillic", language: "русский", text: "Привет!" },
+        { script: "Latin", language: "английский", text: "Как дела?" },
+        { script: "Arabic", language: "арабский", text: "Добро пожаловать." }
       ]
     }
   );
+});
+
+test("keeps compatibility with language-only section markers", () => {
+  assert.deepEqual(parse("[[multilingual]]\n[[lang:арабский]]\nПеревод.").sections, [
+    { script: "", language: "арабский", text: "Перевод." }
+  ]);
 });
 
 test("recognizes a Russian-only skip response", () => {

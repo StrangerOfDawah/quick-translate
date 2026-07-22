@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { hasMultipleScripts, isRussianOnly } = require("../language-detection.js");
+const { detectScripts, hasMultipleScripts, isRussianOnly } = require("../language-detection.js");
 
 test("recognizes Russian-only selections without requiring reliable CLD output", () => {
   assert.equal(isRussianOnly("Привет, как дела?", { isReliable: false, languages: [] }), true);
@@ -25,5 +25,15 @@ test("reliable Chrome detection can distinguish a same-script language", () => {
 });
 
 test("detects Latin, Cyrillic, and Arabic as multiple scripts", () => {
-  assert.equal(hasMultipleScripts("Hello. Привет. مرحبا."), true);
+  const text = "Hello. Привет. مرحبا.";
+  assert.deepEqual(detectScripts(text), ["Latin", "Cyrillic", "Arabic"]);
+  assert.equal(hasMultipleScripts(text), true);
+});
+
+test("detects Arabic with Quranic diacritics alongside English", () => {
+  assert.deepEqual(detectScripts("ذَٰلِكَ ٱلْكِتَٰبُ This is the Scripture"), ["Arabic", "Latin"]);
+});
+
+test("treats Japanese kanji and kana as one writing system", () => {
+  assert.deepEqual(detectScripts("日本語の文章です"), ["Japanese"]);
 });

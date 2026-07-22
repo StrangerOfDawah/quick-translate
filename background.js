@@ -131,7 +131,7 @@ async function translate(rawText, context, wordMode = false) {
 }
 
 // Общая подготовка запроса для обоих режимов — обычного и стримингового.
-async function prepareRequest(rawText, context, wordMode = false) {
+async function prepareRequest(rawText, context, wordMode = false, rawSourceScripts = []) {
   const text = (rawText || "").trim();
   if (!text) throw new Error("Ничего не выделено.");
 
@@ -145,13 +145,15 @@ async function prepareRequest(rawText, context, wordMode = false) {
     throw new Error("Не задан API-ключ. Откройте настройки расширения.");
   }
 
+  const sourceScripts = normalizeSourceScripts(rawSourceScripts);
   const requestMode = wordMode ? "word" : "text";
-  const cacheKey = `${settings.model}|${settings.targetLang}|${requestMode}|${context || ""}|${text}`;
+  const scriptKey = sourceScripts.join(",");
+  const cacheKey = `${settings.model}|${settings.targetLang}|${requestMode}|${scriptKey}|${context || ""}|${text}`;
   const messages = wordMode
-    ? buildWordMessages(text, context, settings.targetLang)
-    : buildTextMessages(text, settings.targetLang);
+    ? buildWordMessages(text, context, settings.targetLang, sourceScripts)
+    : buildTextMessages(text, settings.targetLang, sourceScripts);
 
-  return { settings, cacheKey, messages };
+  return { settings, cacheKey, messages, sourceScripts };
 }
 
 // Стриминг: перевод уходит в content script по мере генерации,
@@ -160,12 +162,18 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== "translate") return;
   port.onMessage.addListener((message) => {
     if (message?.type === "start") {
-      streamTranslate(port, message.text, message.context, message.wordMode);
+      streamTranslate(
+        port,
+        message.text,
+        message.context,
+        message.wordMode,
+        message.sourceScripts
+      );
     }
   });
 });
 
-async function streamTranslate(port, rawText, context, wordMode = false) {
+async function streamTranslate(port, rawText, context, wordMode = false, rawSourceScripts = []) {
   const abort = new AbortController();
   let disconnected = false;
   port.onDisconnect.addListener(() => {
@@ -183,11 +191,32 @@ async function streamTranslate(port, rawText, context, wordMode = false) {
   };
 
   try {
-    const { settings, cacheKey, messages } = await prepareRequest(rawText, context, wordMode);
+    const { settings, cacheKey, messages, sourceScripts } = await prepareRequest(
+      rawText,
+      context,
+      wordMode,
+      rawSourceScripts
+    );
 
     const hit = cacheGet(cacheKey);
     if (hit) {
-      send({ type: "done", text: hit });
+      const cachedIssue = responseIssue(hit, wordMode, sourceScripts);
+      if (!cachedIssue) {
+        send({ type: "done", text: hit });
+        return;
+      }
+
+      const repaired = await repairResponse(
+        settings,
+        messages,
+        hit,
+        cachedIssue,
+        wordMode,
+        sourceScripts,
+        abort.signal
+      );
+      cacheSet(cacheKey, repaired);
+      send({ type: "done", text: repaired });
       return;
     }
 
@@ -243,6 +272,19 @@ async function streamTranslate(port, rawText, context, wordMode = false) {
     full = full.trim();
     if (!full) throw new Error("Пустой ответ от API.");
 
+    const issue = responseIssue(full, wordMode, sourceScripts);
+    if (issue) {
+      full = await repairResponse(
+        settings,
+        messages,
+        full,
+        issue,
+        wordMode,
+        sourceScripts,
+        abort.signal
+      );
+    }
+
     cacheSet(cacheKey, full);
     send({ type: "done", text: full });
   } catch (error) {
@@ -252,21 +294,115 @@ async function streamTranslate(port, rawText, context, wordMode = false) {
   }
 }
 
-function buildTextMessages(text, lang) {
+function normalizeSourceScripts(scripts) {
+  if (!Array.isArray(scripts)) return [];
+  return [...new Set(scripts.filter((script) => /^[A-Za-z]+$/.test(script)))];
+}
+
+function responseIssue(text, wordMode, rawSourceScripts = []) {
+  const value = String(text || "").trim();
+  if (/^\[\[skip\]\]/i.test(value)) {
+    return "Ответ ошибочно содержит запрещённую метку [[skip]].";
+  }
+  if (wordMode) return "";
+
+  const sourceScripts = normalizeSourceScripts(rawSourceScripts);
+  if (sourceScripts.length < 2) return "";
+  if (!/^\[\[multilingual\]\]/i.test(value)) {
+    return "Для выделения с несколькими письменностями отсутствует формат [[multilingual]].";
+  }
+
+  const missing = sourceScripts.filter((script) => {
+    const escaped = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const section = value.match(
+      new RegExp(
+        `\\[\\[script\\s*:\\s*${escaped}\\s*\\|\\s*lang\\s*:[^\\]]+\\]\\]\\s*` +
+          "([\\s\\S]*?)(?=\\n\\[\\[script\\s*:|$)",
+        "i"
+      )
+    );
+    return !section?.[1]?.trim();
+  });
+  return missing.length
+    ? `В ответе отсутствуют секции для письменностей: ${missing.join(", ")}.`
+    : "";
+}
+
+async function repairResponse(
+  settings,
+  messages,
+  invalidResponse,
+  issue,
+  wordMode,
+  sourceScripts,
+  signal
+) {
+  const required = sourceScripts.length > 1
+    ? ` Обязательно верни секции для всех письменностей: ${sourceScripts.join(", ")}.`
+    : "";
+  const repairMessages = [
+    ...messages,
+    { role: "assistant", content: invalidResponse },
+    {
+      role: "user",
+      content:
+        `Исправь ответ: ${issue}${required} Не пропускай ни один исходный фрагмент и не используй [[skip]]. ` +
+        "Повтори весь ответ целиком строго в требуемом формате."
+    }
+  ];
+
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${settings.apiKey}`
+    },
+    body: JSON.stringify({
+      model: settings.model,
+      temperature: 0,
+      messages: repairMessages
+    }),
+    signal
+  });
+
+  if (!response.ok) throw new Error(await describeError(response));
+  const data = await response.json();
+  const repaired = data?.choices?.[0]?.message?.content?.trim();
+  if (!repaired) throw new Error("Пустой ответ при исправлении перевода.");
+
+  const remainingIssue = responseIssue(repaired, wordMode, sourceScripts);
+  if (remainingIssue) {
+    throw new Error("Не удалось получить полный перевод всех выделенных языков — попробуйте ещё раз.");
+  }
+  return repaired;
+}
+
+function buildTextMessages(text, lang, rawSourceScripts = []) {
+  const sourceScripts = normalizeSourceScripts(rawSourceScripts);
+  const scriptList = sourceScripts.join(", ");
+  const multiScript = sourceScripts.length > 1;
+  const format = multiScript
+    ? "В исходном выделении локально обнаружены письменности: " +
+      `${scriptList}. Поэтому ответ ОБЯЗАТЕЛЬНО должен иметь формат:\n` +
+      "[[multilingual]]\n" +
+      "[[script:Latin|lang:название исходного языка по-русски]]\n" +
+      `перевод фрагмента на язык «${lang}»\n` +
+      "Заменяй Latin на точное значение из списка обнаруженных письменностей. " +
+      "В ответе должна быть хотя бы одна непустая секция для КАЖДОЙ письменности из списка; ничего не пропускай."
+    : `Если весь исходный текст на одном языке, ответь:\n[[text]]\nполный перевод на язык «${lang}» без пояснений и исходного текста\n` +
+      "Только если в самом исходном тексте действительно несколько языков одной письменности, используй формат:\n" +
+      "[[multilingual]]\n[[script:Latin|lang:название исходного языка по-русски]]\nперевод фрагмента";
+
   return [
     {
       role: "system",
       content:
         `Ты профессиональный переводчик на язык «${lang}». Самостоятельно определи язык каждого предложения или смыслового фрагмента. ` +
         "Не считай английский языком по умолчанию: в одном выделении могут одновременно встречаться русский, английский, арабский и другие языки. " +
-        "Переводи только фрагменты не на целевом языке; фрагменты уже на целевом языке сохраняй дословно. Сохраняй порядок, абзацы, имена собственные и технические термины.\n" +
-        "Ответь строго в одном из трёх форматов. Служебные метки пиши точно как указано.\n" +
-        `Если весь текст уже на языке «${lang}», ответь только:\n[[skip]]\n` +
-        `Если весь текст на одном языке, отличном от «${lang}», ответь:\n[[text]]\nполный перевод на язык «${lang}» без пояснений и исходного текста\n` +
-        "Если в выделении есть два или больше языков, включая сочетание русского с одним иностранным языком, ответь:\n" +
-        "[[multilingual]]\n" +
-        "[[lang:название исходного языка по-русски]]\n" +
-        `перевод этого фрагмента на язык «${lang}»; если фрагмент уже на целевом языке, повтори его без изменений\n` +
+        "Переводи только фрагменты не на целевом языке; фрагменты уже на целевом языке сохраняй дословно. Сохраняй порядок, абзацы, имена собственные и технические термины. " +
+        "Определяй количество языков только по исходному пользовательскому тексту: русский язык результата не является вторым исходным языком.\n" +
+        "Метка [[skip]] запрещена: проверка русского текста уже выполнена локально до запроса. Служебные метки пиши точно как указано.\n" +
+        `${format}\n` +
         "Создавай отдельную секцию для каждого последовательного предложения или блока исходного языка и сохраняй исходный порядок. Соседние фрагменты одного языка можно объединить. Не добавляй никаких пояснений вне секций."
     },
     { role: "user", content: text }
@@ -275,16 +411,21 @@ function buildTextMessages(text, lang) {
 
 // Короткий фрагмент переводим с оглядкой на предложение: у слова значений много,
 // а нужно то единственное, в котором оно употреблено здесь.
-function buildWordMessages(text, context, lang) {
+function buildWordMessages(text, context, lang, rawSourceScripts = []) {
+  const sourceScripts = normalizeSourceScripts(rawSourceScripts);
+  const scriptHint = sourceScripts.length
+    ? ` Локально определённая письменность выделения: ${sourceScripts.join(", ")}.`
+    : "";
   return [
     {
       role: "system",
       content:
-        `Ты профессиональный переводчик на ${lang} язык. Самостоятельно определи исходный язык выделенного фрагмента; не считай английский языком по умолчанию. ` +
+        `Ты профессиональный переводчик на ${lang} язык. Самостоятельно определи исходный язык выделенного фрагмента; не считай английский языком по умолчанию.${scriptHint} ` +
         "Контекст, если он дан, нужен ТОЛЬКО для определения значения — переводить его целиком не нужно.\n" +
         "Сначала определи, как фрагмент употреблён именно здесь. Заглавная буква сама по себе НЕ означает, что это имя или название: слово может стоять в начале предложения. Если контекста нет, но фрагмент является обычным словарным словом хотя бы одного языка, предпочти перевод. Например, «Why» — обычное английское слово и переводится как «почему».\n" +
         "Используй режим reference только если по контексту фрагмент употреблён как имя, название, бренд или никнейм либо если это действительно опечатка или придуманное слово без словарного значения. Например, Apple в «Apple released an update» — бренд, а apple в «I ate an apple» — обычное слово. Не выдумывай значения и факты.\n" +
         "Ответь строго в одном из двух форматов. Служебную метку пиши точно как указано.\n" +
+        "Метка [[skip]] запрещена. Даже если перевод не требуется, используй [[translation]] и верни фрагмент без изменений.\n" +
         "Для обычного слова или выражения:\n" +
         "[[translation]]\n" +
         `перевод в подходящем по контексту значении на языке «${lang}»\n` +

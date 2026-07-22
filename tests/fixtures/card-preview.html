@@ -121,9 +121,9 @@
           selectAndTranslate(
             document.getElementById("multilingual"),
             "[[multilingual]]\n" +
-              "[[lang:русский]]\nПривет!\n" +
-              "[[lang:английский]]\nКак дела?\n" +
-              "[[lang:арабский]]\nДобро пожаловать."
+              "[[script:Cyrillic|lang:русский]]\nПривет!\n" +
+              "[[script:Latin|lang:английский]]\nКак дела?\n" +
+              "[[script:Arabic|lang:арабский]]\nДобро пожаловать."
           );
         } else if (name === "russian") {
           selectAndTranslate(document.getElementById("russian"), "[[skip]]");
