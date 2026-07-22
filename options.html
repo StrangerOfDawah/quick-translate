@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <title>Быстрый перевод — настройки</title>
+    <title>Sensemark — настройки</title>
     <style>
       :root {
         color-scheme: dark light;
@@ -177,6 +177,26 @@
         text-decoration: none;
       }
       .text-link:hover { text-decoration: underline; }
+
+      .consent {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        cursor: pointer;
+      }
+      .consent input {
+        flex: none;
+        width: 18px;
+        height: 18px;
+        margin-top: 2px;
+        accent-color: var(--a2);
+        cursor: pointer;
+      }
+      .consent-copy {
+        color: var(--text);
+        font-size: 13.5px;
+        line-height: 1.5;
+      }
 
       /* ── Поля ───────────────────────────────────────── */
       input[type="password"],
@@ -431,7 +451,7 @@
             </g>
           </svg>
         </div>
-        <h1>Быстрый перевод</h1>
+        <h1>Sensemark</h1>
         <p class="app-sub">Выделите текст на любой странице — и нажмите <span id="kbd"></span></p>
       </header>
 
@@ -451,6 +471,15 @@
               >Политика конфиденциальности</a>.
             </div>
           </div>
+        </div>
+        <div class="row">
+          <label class="consent">
+            <input id="dataConsent" type="checkbox" />
+            <span class="consent-copy">
+              Я понимаю и согласен, что для перевода выделенный текст и, для короткого фрагмента,
+              окружающее предложение будут отправляться напрямую в OpenAI.
+            </span>
+          </label>
         </div>
       </section>
 

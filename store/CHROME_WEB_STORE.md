@@ -6,7 +6,7 @@ Use these values in the Chrome Web Store Developer Dashboard for version `1.2.0`
 
 **Name**
 
-Быстрый перевод на русский
+Sensemark
 
 **Summary**
 
@@ -29,7 +29,7 @@ Productivity
 
 **Detailed description**
 
-Быстрый перевод на русский помогает читать английские статьи, документацию и рабочие материалы, не покидая текущую страницу.
+Sensemark помогает читать английские статьи, документацию и рабочие материалы, не покидая текущую страницу.
 
 Выделите текст и нажмите ⌘⇧Y на Mac или Ctrl+Shift+Y на Windows. Перевод появится рядом с выделением и будет выводиться сразу по мере генерации. Также можно использовать контекстное меню или включить автоматический перевод при выделении.
 
@@ -103,10 +103,11 @@ Select **No, I am not using remote code**. All executable JavaScript and CSS are
 The extension requires an OpenAI API key with available API balance.
 
 1. Install the extension; the settings page opens automatically.
-2. Paste the reviewer API key into “API-ключ OpenAI”.
-3. Click “Проверить ключ” and confirm that “Работает” appears.
-4. Open any regular HTTPS page, select an English sentence, and press Ctrl+Shift+Y (Windows/Linux) or Command+Shift+Y (macOS).
-5. Confirm that the Russian translation streams into a card next to the selection.
-6. Select a single ambiguous word inside a sentence and repeat; confirm that the context-specific translation and alternative meanings are displayed.
+2. Review the data disclosure and select the consent checkbox.
+3. Paste the reviewer API key into “API-ключ OpenAI”.
+4. Click “Проверить ключ” and confirm that “Работает” appears.
+5. Open any regular HTTPS page, select an English sentence, and press Ctrl+Shift+Y (Windows/Linux) or Command+Shift+Y (macOS).
+6. Confirm that the Russian translation streams into a card next to the selection.
+7. Select a single ambiguous word inside a sentence and repeat; confirm that the context-specific translation and alternative meanings are displayed.
 
 Do not commit a reviewer key to this repository. If reviewer credentials are supplied, create a dedicated OpenAI project/key with a small budget and place the credential only in the Dashboard's test-instructions field.

@@ -4,11 +4,11 @@
 
 </div>
 
-<img src="docs/hero.png" alt="Quick Translate — select text on any page and get a translation">
+<img src="docs/hero.png" alt="Sensemark — select text on any page and get a contextual translation">
 
 <div align="center">
 
-[**Download the latest release**](https://github.com/StrangerOfDawah/quick-translate/releases/latest) · Chrome · Manifest V3 · OpenAI API · [Privacy](PRIVACY.md)
+[**Download the latest release**](https://github.com/StrangerOfDawah/quick-translate/releases/latest) · Chrome · Manifest V3 · OpenAI API · [Privacy](PRIVACY.en.md)
 
 </div>
 
@@ -100,7 +100,7 @@ You can rebind the shortcut at `chrome://extensions/shortcuts`. If it doesn't wo
 | `options.html` · `options.js` | Settings page |
 | `icons/` | Icons, 16–128 |
 
-The key is stored in `chrome.storage.local`. Selected text and, for a short selection, its surrounding sentence are sent directly to OpenAI for translation. The extension has no developer-operated server and no analytics; see the [privacy policy](PRIVACY.md) for details.
+The key is stored in `chrome.storage.local`. Selected text and, for a short selection, its surrounding sentence are sent directly to OpenAI for translation. The extension has no developer-operated server and no analytics; see the [privacy policy](PRIVACY.en.md) for details.
 
 Repeat translations of the same fragment come from an in-memory cache in the service worker (last 200) and cost nothing. Selections are capped at 5000 characters so an accidental <kbd>⌘</kbd><kbd>A</kbd> doesn't send a whole page to the API.
 
