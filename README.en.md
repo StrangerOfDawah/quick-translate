@@ -8,7 +8,7 @@
 
 <div align="center">
 
-[**Download the latest release**](https://github.com/StrangerOfDawah/quick-translate/releases/latest) · Chrome · Manifest V3 · OpenAI API · [Privacy](PRIVACY.en.md)
+[**Download the latest release**](https://github.com/StrangerOfDawah/sensemark/releases/latest) · Chrome · Manifest V3 · OpenAI API · [Privacy](PRIVACY.en.md)
 
 </div>
 
@@ -52,7 +52,7 @@ The whole card scales, not just the font — padding, buttons and icons grow wit
 
 ## Install
 
-1. Download the archive from the [**Releases**](https://github.com/StrangerOfDawah/quick-translate/releases/latest) page and unpack it
+1. Download the archive from the [**Releases**](https://github.com/StrangerOfDawah/sensemark/releases/latest) page and unpack it
 2. Open `chrome://extensions`
 3. Turn on **Developer mode** — the toggle in the top right
 4. Click **Load unpacked** and select the unpacked folder

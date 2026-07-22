@@ -40,4 +40,4 @@ The Extension's use of information complies with the [Chrome Web Store User Data
 
 ## Changes and contact
 
-Material changes will be published in this file with an updated effective date. For privacy questions, [open an issue in the public repository](https://github.com/StrangerOfDawah/quick-translate/issues).
+Material changes will be published in this file with an updated effective date. For privacy questions, [open an issue in the public repository](https://github.com/StrangerOfDawah/sensemark/issues).
