@@ -19,6 +19,7 @@ cd "$ROOT_DIR"
 zip -q -r "$ARCHIVE" \
   manifest.json \
   background.js \
+  word-response.js \
   content.js \
   options.html \
   options.js \

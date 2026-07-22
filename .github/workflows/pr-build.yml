@@ -28,9 +28,11 @@ jobs:
       - name: Validate source and manifest
         run: |
           node --check background.js
+          node --check word-response.js
           node --check content.js
           node --check options.js
           node --test tests/background-prompts.test.js
+          node --test tests/word-response.test.js
           jq empty manifest.json
 
       - name: Build extension archive

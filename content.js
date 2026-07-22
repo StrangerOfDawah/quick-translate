@@ -1,6 +1,12 @@
 (() => {
   // Скрипт может быть внедрён повторно из background — второй раз не выполняемся.
   if (window.__gptTranslateLoaded) return;
+
+  const parseWordResponse = globalThis.SensemarkWordResponse?.parse;
+  if (!parseWordResponse) {
+    console.error("Sensemark: word response parser is unavailable.");
+    return;
+  }
   window.__gptTranslateLoaded = true;
 
   const HOST_ID = "__gpt_translate_popup_host__";
@@ -340,6 +346,29 @@
           }
         }
 
+        .card.reference {
+          --accent: #d97706;
+          background:
+            linear-gradient(rgba(255, 251, 242, 0.88), rgba(255, 251, 242, 0.88)) padding-box,
+            linear-gradient(135deg, rgba(255, 159, 10, 0.72), rgba(255, 214, 10, 0.34) 55%, rgba(255, 107, 64, 0.42)) border-box;
+          box-shadow:
+            0 1px 2px rgba(0, 0, 0, 0.06),
+            0 12px 44px rgba(0, 0, 0, 0.2),
+            0 0 34px rgba(255, 159, 10, 0.16);
+        }
+        @media (prefers-color-scheme: dark) {
+          .card.reference {
+            --accent: #ff9f0a;
+            background:
+              linear-gradient(rgba(30, 27, 20, 0.82), rgba(30, 27, 20, 0.82)) padding-box,
+              linear-gradient(135deg, rgba(255, 159, 10, 0.8), rgba(255, 214, 10, 0.38) 55%, rgba(255, 107, 64, 0.5)) border-box;
+            box-shadow:
+              0 1px 2px rgba(0, 0, 0, 0.32),
+              0 12px 44px rgba(0, 0, 0, 0.5),
+              0 0 38px rgba(255, 159, 10, 0.14);
+          }
+        }
+
         .hd {
           display: flex;
           align-items: center;
@@ -366,6 +395,11 @@
           box-shadow: 0 0 9px rgba(100, 210, 255, 0.9);
           flex: none;
         }
+        .card.reference .badge { color: var(--accent); }
+        .card.reference .badge::before {
+          background: linear-gradient(135deg, #ffd60a, #ff7a00);
+          box-shadow: 0 0 10px rgba(255, 159, 10, 0.75);
+        }
         .sp { flex: 1; }
 
         .bd {
@@ -390,6 +424,29 @@
           user-select: text;
           -webkit-user-select: text;
           cursor: text;
+        }
+        .card.reference .tr {
+          font-size: 1.14em;
+          font-weight: 650;
+        }
+
+        .term-kind {
+          display: inline-flex;
+          width: fit-content;
+          margin-bottom: 0.5em;
+          padding: 0.24em 0.62em;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--accent) 14%, transparent);
+          color: var(--accent);
+          font-size: 0.72em;
+          font-weight: 700;
+          letter-spacing: 0.07em;
+          text-transform: uppercase;
+        }
+        .reference-note {
+          margin-top: 0.3em;
+          color: var(--sec);
+          font-size: 0.82em;
         }
 
         .sk {
@@ -670,9 +727,18 @@
     });
   }
 
+  function setCardPresentation(mode) {
+    const reference = mode === "reference";
+    card.classList.toggle("reference", reference);
+    card.setAttribute("aria-label", reference ? "Объяснение фрагмента" : "Перевод");
+    const badge = shadow.querySelector(".badge");
+    if (badge) badge.textContent = reference ? "Объяснение" : "Перевод";
+  }
+
   function render(rect, payload) {
     ensureHost();
     lastRect = rect;
+    setCardPresentation("translation");
 
     if (payload.state === "loading") {
       bodyEl.innerHTML = `
@@ -701,8 +767,11 @@
   // строкой, а ниже — другие значения или объяснение несловарного фрагмента.
   // У обычного текста переносы строк — это просто абзацы, и разбирать их нельзя.
   function beginStreamCard(source, wordMode) {
+    setCardPresentation("translation");
     bodyEl.innerHTML = `
+      <div class="term-kind" hidden></div>
       <p class="tr"><span class="live"></span><span class="caret"></span></p>
+      <p class="reference-note" hidden>Не переводится как обычное слово</p>
       <div class="alt" hidden><div class="cap">Другие значения</div><p class="alt-t"></p></div>
       <div class="src"><p class="src-t"></p></div>
       <div class="acts pending">
@@ -714,9 +783,12 @@
     const state = {
       main: "",
       copyText: "",
+      source: source || "",
       wordMode,
+      termKind: bodyEl.querySelector(".term-kind"),
       live: bodyEl.querySelector(".live"),
       caret: bodyEl.querySelector(".caret"),
+      referenceNote: bodyEl.querySelector(".reference-note"),
       alt: bodyEl.querySelector(".alt"),
       altCap: bodyEl.querySelector(".alt .cap"),
       altT: bodyEl.querySelector(".alt-t"),
@@ -760,25 +832,37 @@
       return;
     }
 
-    // Для слов модель возвращает перевод первой строкой, прочие значения — ниже.
-    const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
-    streamState.main = lines[0] || "";
-    streamState.copyText = streamState.main;
-    streamState.live.textContent = streamState.main;
+    const parsed = parseWordResponse(text);
+    if (parsed.mode === "pending") return;
 
-    const secondary = lines.slice(1).join(" ");
-    const possible = secondary.match(/^возможно,?\s+это\s*:\s*(.+)$/i);
-    const meanings = secondary.match(/^друг\S*\s+значения\s*:\s*(.+)$/i);
-    if (possible) {
+    if (parsed.mode === "reference") {
+      setCardPresentation("reference");
+      streamState.termKind.hidden = false;
+      streamState.termKind.textContent = parsed.category || "Неизвестный термин";
+      streamState.live.textContent = streamState.source;
+      streamState.referenceNote.hidden = false;
+      streamState.referenceNote.textContent = /опечат|неизвест/i.test(parsed.category)
+        ? "Словарное значение не найдено"
+        : `Использовано как ${parsed.category || "имя или название"} — перевод не требуется`;
       streamState.alt.hidden = false;
-      streamState.altCap.textContent = "Возможное объяснение";
-      streamState.altT.textContent = possible[1];
-      streamState.copyText = `${streamState.main}\nВозможно, это: ${possible[1]}`;
-    } else if (meanings) {
-      streamState.alt.hidden = false;
-      streamState.altCap.textContent = "Другие значения";
-      streamState.altT.textContent = meanings[1];
+      streamState.altCap.textContent = parsed.detailLabel || "Что это может быть";
+      streamState.altT.textContent = parsed.detail;
+      streamState.altT.appendChild(streamState.caret);
+      streamState.main = streamState.source;
+      streamState.copyText = [streamState.source, parsed.detail].filter(Boolean).join("\n");
+      return;
     }
+
+    setCardPresentation("translation");
+    streamState.termKind.hidden = true;
+    streamState.referenceNote.hidden = true;
+    streamState.main = parsed.main;
+    streamState.copyText = parsed.main;
+    streamState.live.textContent = parsed.main;
+    streamState.live.after(streamState.caret);
+    streamState.alt.hidden = !parsed.detail;
+    streamState.altCap.textContent = parsed.detailLabel || "Другие значения";
+    streamState.altT.textContent = parsed.detail;
   }
 
   function finalizeStream() {

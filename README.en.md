@@ -30,7 +30,7 @@ Close the card mid-translation and the request aborts — unfinished tokens aren
 
 Selected a single word? The extension picks up the surrounding sentence and asks for the translation that fits *that* sentence. Other common meanings are listed underneath, in case you needed a different one.
 
-If the selection is not a common word — for example, it is a name, title, username, brand, or typo — Sensemark does not invent a translation. It says the word was not found and gives a brief, cautious explanation based on its spelling and context. If there is not enough information, it identifies the fragment as a likely proper name or title.
+If the selection is not a common word — for example, it is a name, title, username, brand, or typo — Sensemark does not invent a translation. The card switches to a separate amber **Explanation** state, shows the fragment category, and gives a brief, cautious description based on its spelling and context. If there is not enough information, it identifies the fragment as a likely proper name or title.
 
 <img src="docs/feature-context.png" alt="The word bank in two contexts: банк and берег">
 
@@ -106,6 +106,7 @@ You can rebind the shortcut at `chrome://extensions/shortcuts`. If it doesn't wo
 | --- | --- |
 | `manifest.json` | Manifest, permissions, keyboard shortcut |
 | `background.js` | Service worker: context menu, OpenAI streaming, translation cache |
+| `word-response.js` | Word-response parser: regular translation or name/title explanation |
 | `content.js` | On-page card, context extraction, scale and size |
 | `options.html` · `options.js` | Settings page |
 | `icons/` | Icons, 16–128 |

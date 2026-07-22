@@ -58,9 +58,11 @@ test("word prompt defines a safe unknown-term response", () => {
   const messages = buildWordMessages("Sensemark", null, "русский");
   const prompt = messages[0].content;
 
-  assert.match(prompt, /Такого общеупотребительного слова не существует\./);
-  assert.match(prompt, /Возможно, это: имя собственное или название\./);
-  assert.match(prompt, /Не выдумывай факты/);
+  assert.match(prompt, /«Why» — обычное английское слово/);
+  assert.match(prompt, /\[\[translation\]\]/);
+  assert.match(prompt, /\[\[reference\]\]/);
+  assert.match(prompt, /Заглавная буква сама по себе НЕ означает/);
+  assert.match(prompt, /Не выдумывай значения и факты/);
   assert.match(messages[1].content, /Контекст не предоставлен/);
 });
 
@@ -70,7 +72,7 @@ test("word mode is explicit even when sentence context is unavailable", async ()
   const textRequest = await prepareRequest("Sensemark", null, false);
 
   assert.match(wordRequest.cacheKey, /\|word\|/);
-  assert.match(wordRequest.messages[0].content, /общеупотребительного слова/);
+  assert.match(wordRequest.messages[0].content, /\[\[reference\]\]/);
   assert.match(textRequest.cacheKey, /\|text\|/);
-  assert.doesNotMatch(textRequest.messages[0].content, /общеупотребительного слова/);
+  assert.doesNotMatch(textRequest.messages[0].content, /\[\[reference\]\]/);
 });
