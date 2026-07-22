@@ -14,6 +14,8 @@
 
 > The interface is in Russian and the extension translates **into** Russian — the source language is detected automatically. To target another language, change `targetLang` in `DEFAULTS` inside `background.js` and `options.js`.
 
+A Russian-only selection is ignored without opening the card or calling the API. When one selection mixes Russian, English, Arabic, or other languages, Russian fragments stay unchanged while the remaining fragments are translated and displayed in separate source-language sections.
+
 <br>
 
 ## No waiting for the translation
@@ -106,7 +108,9 @@ You can rebind the shortcut at `chrome://extensions/shortcuts`. If it doesn't wo
 | --- | --- |
 | `manifest.json` | Manifest, permissions, keyboard shortcut |
 | `background.js` | Service worker: context menu, OpenAI streaming, translation cache |
+| `language-detection.js` | Local check for whether the selected text needs translation |
 | `word-response.js` | Word-response parser: regular translation or name/title explanation |
+| `text-response.js` | Parser for regular and sectioned multilingual translations |
 | `content.js` | On-page card, context extraction, scale and size |
 | `options.html` · `options.js` | Settings page |
 | `icons/` | Icons, 16–128 |

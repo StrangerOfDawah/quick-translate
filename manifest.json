@@ -17,7 +17,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["word-response.js", "content.js"],
+      "js": ["language-detection.js", "word-response.js", "text-response.js", "content.js"],
       "run_at": "document_idle",
       "all_frames": true
     }

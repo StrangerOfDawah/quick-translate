@@ -48,9 +48,12 @@ test("text prompt auto-detects the source language", () => {
   const { buildTextMessages } = loadBackground();
   const prompt = buildTextMessages("مرحبا", "русский")[0].content;
 
-  assert.match(prompt, /Самостоятельно определи исходный язык/);
-  assert.match(prompt, /Не считай английский исходным языком по умолчанию/);
-  assert.match(prompt, /Если текст уже на русский, верни его без изменений/);
+  assert.match(prompt, /Самостоятельно определи язык каждого предложения/);
+  assert.match(prompt, /Не считай английский языком по умолчанию/);
+  assert.match(prompt, /\[\[skip\]\]/);
+  assert.match(prompt, /\[\[text\]\]/);
+  assert.match(prompt, /\[\[multilingual\]\]/);
+  assert.match(prompt, /Переводи только фрагменты не на целевом языке/);
 });
 
 test("word prompt defines a safe unknown-term response", () => {

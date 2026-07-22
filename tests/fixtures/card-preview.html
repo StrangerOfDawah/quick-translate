@@ -19,8 +19,18 @@
       .hint { color: #8f99ad; margin: 0 0 42px; }
       .sample { margin: 28px 0; padding: 24px; border: 1px solid #293246; border-radius: 16px; }
       mark { color: #fff; background: #38547d; padding: 2px 5px; border-radius: 4px; }
+      .controls {
+        position: fixed;
+        top: 22px;
+        right: 22px;
+        z-index: 2147483647;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+        max-width: 720px;
+      }
       button {
-        margin-right: 10px;
         padding: 10px 16px;
         border: 0;
         border-radius: 10px;
@@ -34,12 +44,18 @@
   <body>
     <main>
       <h1>Sensemark UI preview</h1>
-      <p class="hint">Два ответа без обращения к OpenAI — для визуальной проверки карточки.</p>
-      <button data-case="translation">Обычный перевод</button>
-      <button data-case="reference">Объяснение названия</button>
+      <p class="hint">Локальные ответы без обращения к OpenAI — для визуальной проверки карточки.</p>
+      <div class="controls">
+        <button data-case="translation">Обычный перевод</button>
+        <button data-case="reference">Объяснение названия</button>
+        <button data-case="multilingual">Несколько языков</button>
+        <button data-case="russian">Только русский</button>
+      </div>
 
       <p class="sample" id="translation-sample"><mark id="why">Why</mark> does this happen?</p>
       <p class="sample" id="reference-sample">Use <mark id="sensemark">Sensemark</mark> to translate the selection.</p>
+      <p class="sample"><mark id="multilingual">Привет! How are you? مرحبا بك.</mark></p>
+      <p class="sample"><mark id="russian">Этот текст уже написан на русском языке.</mark></p>
     </main>
 
     <script>
@@ -48,6 +64,12 @@
 
       const eventStub = () => ({ addListener() {} });
       window.chrome = {
+        i18n: {
+          detectLanguage: async (text) => ({
+            isReliable: true,
+            languages: [{ language: /^[А-Яа-яЁё\s.,!?]+$/u.test(text) ? "ru" : "en", percentage: 100 }]
+          })
+        },
         storage: {
           local: {
             get: async (defaults) => ({ ...defaults, autoTranslate: false }),
@@ -95,6 +117,16 @@
             document.getElementById("sensemark"),
             "[[reference]]\nназвание\nВероятно, название расширения для контекстного перевода."
           );
+        } else if (name === "multilingual") {
+          selectAndTranslate(
+            document.getElementById("multilingual"),
+            "[[multilingual]]\n" +
+              "[[lang:русский]]\nПривет!\n" +
+              "[[lang:английский]]\nКак дела?\n" +
+              "[[lang:арабский]]\nДобро пожаловать."
+          );
+        } else if (name === "russian") {
+          selectAndTranslate(document.getElementById("russian"), "[[skip]]");
         } else {
           selectAndTranslate(
             document.getElementById("why"),
@@ -103,7 +135,9 @@
         }
       };
     </script>
+    <script src="../../language-detection.js"></script>
     <script src="../../word-response.js"></script>
+    <script src="../../text-response.js"></script>
     <script src="../../content.js"></script>
     <script>
       document.querySelectorAll("[data-case]").forEach((button) => {

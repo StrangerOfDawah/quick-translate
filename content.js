@@ -3,8 +3,11 @@
   if (window.__gptTranslateLoaded) return;
 
   const parseWordResponse = globalThis.SensemarkWordResponse?.parse;
-  if (!parseWordResponse) {
-    console.error("Sensemark: word response parser is unavailable.");
+  const parseTextResponse = globalThis.SensemarkTextResponse?.parse;
+  const isRussianOnly = globalThis.SensemarkLanguageDetection?.isRussianOnly;
+  const hasMultipleScripts = globalThis.SensemarkLanguageDetection?.hasMultipleScripts;
+  if (!parseWordResponse || !parseTextResponse || !isRussianOnly || !hasMultipleScripts) {
+    console.error("Sensemark: response helpers are unavailable.");
     return;
   }
   window.__gptTranslateLoaded = true;
@@ -114,7 +117,7 @@
 
     // Для коротких фрагментов подтягиваем предложение вокруг — без него
     // многозначные слова переводятся наугад.
-    const wordMode = isShort(text);
+    const wordMode = isShort(text) && !hasMultipleScripts(text);
     const context = wordMode ? extractContext(range, text) : null;
 
     return { text, rect, context, wordMode };
@@ -122,6 +125,16 @@
 
   function isShort(text) {
     return text.length <= 40 && text.split(/\s+/).length <= 3;
+  }
+
+  async function shouldIgnoreSelection(text) {
+    let detection = null;
+    try {
+      detection = await chrome.i18n?.detectLanguage?.(text);
+    } catch {
+      // Локальный CLD может не дать результат для очень короткого текста.
+    }
+    return isRussianOnly(text, detection);
   }
 
   // Ближайший блочный предок — за его границы предложение не выходит.
@@ -195,10 +208,21 @@
     }
 
     const id = ++requestId;
+    currentPort?.disconnect();
+    currentPort = null;
+
+    // Русский текст уже является результатом перевода: не показываем карточку
+    // и не отправляем лишний запрос в OpenAI.
+    if (await shouldIgnoreSelection(info.text)) {
+      if (id !== requestId) return;
+      if (host) close();
+      return;
+    }
+    if (id !== requestId) return;
+
     render(info.rect, { state: "loading" });
 
     // Стриминг: перевод печатается по мере генерации, не дожидаясь всего ответа.
-    currentPort?.disconnect();
     let port;
     try {
       port = chrome.runtime.connect({ name: "translate" });
@@ -223,7 +247,13 @@
           beginStreamCard(info.text, info.wordMode);
           started = true;
         }
-        updateStream(message.text);
+        const action = updateStream(message.text);
+        if (action === "skip") {
+          release();
+          port.disconnect();
+          close();
+          return;
+        }
         position(lastRect);
         if (message.type === "done") {
           finalizeStream();
@@ -396,6 +426,7 @@
           flex: none;
         }
         .card.reference .badge { color: var(--accent); }
+        .card.multilingual .badge { color: var(--accent); }
         .card.reference .badge::before {
           background: linear-gradient(135deg, #ffd60a, #ff7a00);
           box-shadow: 0 0 10px rgba(255, 159, 10, 0.75);
@@ -447,6 +478,39 @@
           margin-top: 0.3em;
           color: var(--sec);
           font-size: 0.82em;
+        }
+
+        .segments {
+          display: grid;
+          gap: 0.86em;
+        }
+        .segment + .segment {
+          padding-top: 0.79em;
+          border-top: 1px solid var(--hair);
+        }
+        .segment-lang {
+          display: inline-flex;
+          width: fit-content;
+          margin-bottom: 0.36em;
+          padding: 0.22em 0.58em;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--accent) 12%, transparent);
+          color: var(--accent);
+          font-size: 0.7em;
+          font-weight: 700;
+          letter-spacing: 0.055em;
+          text-transform: uppercase;
+        }
+        .segment-lang.kept {
+          background: var(--fill);
+          color: var(--sec);
+        }
+        .segment-text {
+          font-size: 1em;
+          white-space: pre-wrap;
+          overflow-wrap: break-word;
+          user-select: text;
+          -webkit-user-select: text;
         }
 
         .sk {
@@ -729,10 +793,15 @@
 
   function setCardPresentation(mode) {
     const reference = mode === "reference";
+    const multilingual = mode === "multilingual";
     card.classList.toggle("reference", reference);
-    card.setAttribute("aria-label", reference ? "Объяснение фрагмента" : "Перевод");
+    card.classList.toggle("multilingual", multilingual);
+    card.setAttribute(
+      "aria-label",
+      reference ? "Объяснение фрагмента" : multilingual ? "Перевод с нескольких языков" : "Перевод"
+    );
     const badge = shadow.querySelector(".badge");
-    if (badge) badge.textContent = reference ? "Объяснение" : "Перевод";
+    if (badge) badge.textContent = reference ? "Объяснение" : multilingual ? "Несколько языков" : "Перевод";
   }
 
   function render(rect, payload) {
@@ -771,6 +840,7 @@
     bodyEl.innerHTML = `
       <div class="term-kind" hidden></div>
       <p class="tr"><span class="live"></span><span class="caret"></span></p>
+      <div class="segments" hidden></div>
       <p class="reference-note" hidden>Не переводится как обычное слово</p>
       <div class="alt" hidden><div class="cap">Другие значения</div><p class="alt-t"></p></div>
       <div class="src"><p class="src-t"></p></div>
@@ -786,8 +856,10 @@
       source: source || "",
       wordMode,
       termKind: bodyEl.querySelector(".term-kind"),
+      mainEl: bodyEl.querySelector(".tr"),
       live: bodyEl.querySelector(".live"),
       caret: bodyEl.querySelector(".caret"),
+      segments: bodyEl.querySelector(".segments"),
       referenceNote: bodyEl.querySelector(".reference-note"),
       alt: bodyEl.querySelector(".alt"),
       altCap: bodyEl.querySelector(".alt .cap"),
@@ -825,10 +897,26 @@
     if (!streamState) return;
 
     if (!streamState.wordMode) {
-      // Обычный текст показываем как есть — переносы строк это абзацы оригинала.
-      streamState.main = text;
-      streamState.copyText = text;
-      streamState.live.textContent = text;
+      const parsed = parseTextResponse(text);
+      if (parsed.mode === "pending") return;
+      if (parsed.mode === "skip") return "skip";
+
+      if (parsed.mode === "multilingual") {
+        setCardPresentation("multilingual");
+        streamState.mainEl.hidden = true;
+        streamState.segments.hidden = false;
+        renderLanguageSections(streamState, parsed.sections);
+        return;
+      }
+
+      // Обычный перевод показываем как есть — переносы строк это абзацы.
+      setCardPresentation("translation");
+      streamState.mainEl.hidden = false;
+      streamState.segments.hidden = true;
+      streamState.main = parsed.text;
+      streamState.copyText = parsed.text;
+      streamState.live.textContent = parsed.text;
+      streamState.live.after(streamState.caret);
       return;
     }
 
@@ -863,6 +951,35 @@
     streamState.alt.hidden = !parsed.detail;
     streamState.altCap.textContent = parsed.detailLabel || "Другие значения";
     streamState.altT.textContent = parsed.detail;
+  }
+
+  function renderLanguageSections(state, sections) {
+    state.segments.textContent = "";
+    let lastText = null;
+
+    for (const section of sections) {
+      const item = document.createElement("section");
+      item.className = "segment";
+
+      const language = document.createElement("div");
+      const isRussian = /^русск/i.test(section.language);
+      language.className = `segment-lang${isRussian ? " kept" : ""}`;
+      language.textContent = isRussian
+        ? `${section.language} · без изменений`
+        : `${section.language} → русский`;
+
+      const translated = document.createElement("p");
+      translated.className = "segment-text";
+      translated.textContent = section.text;
+      item.append(language, translated);
+      state.segments.appendChild(item);
+      lastText = translated;
+    }
+
+    (lastText || state.segments).appendChild(state.caret);
+    const combined = sections.map((section) => section.text).filter(Boolean).join("\n\n");
+    state.main = combined;
+    state.copyText = combined;
   }
 
   function finalizeStream() {
