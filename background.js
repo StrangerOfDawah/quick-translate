@@ -87,7 +87,7 @@ async function ping(tabId, frameId) {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "translate") {
-    translate(message.text, message.context)
+    translate(message.text, message.context, message.wordMode)
       .then((text) => sendResponse({ ok: true, text }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true; // держим канал открытым для асинхронного ответа
@@ -99,8 +99,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 // Разовый перевод без стриминга — используется кнопкой «Проверить ключ».
-async function translate(rawText, context) {
-  const { settings, cacheKey, messages } = await prepareRequest(rawText, context);
+async function translate(rawText, context, wordMode = false) {
+  const { settings, cacheKey, messages } = await prepareRequest(rawText, context, wordMode);
 
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
@@ -131,7 +131,7 @@ async function translate(rawText, context) {
 }
 
 // Общая подготовка запроса для обоих режимов — обычного и стримингового.
-async function prepareRequest(rawText, context) {
+async function prepareRequest(rawText, context, wordMode = false) {
   const text = (rawText || "").trim();
   if (!text) throw new Error("Ничего не выделено.");
 
@@ -145,8 +145,9 @@ async function prepareRequest(rawText, context) {
     throw new Error("Не задан API-ключ. Откройте настройки расширения.");
   }
 
-  const cacheKey = `${settings.model}|${settings.targetLang}|${context || ""}|${text}`;
-  const messages = context
+  const requestMode = wordMode ? "word" : "text";
+  const cacheKey = `${settings.model}|${settings.targetLang}|${requestMode}|${context || ""}|${text}`;
+  const messages = wordMode
     ? buildWordMessages(text, context, settings.targetLang)
     : buildTextMessages(text, settings.targetLang);
 
@@ -159,12 +160,12 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== "translate") return;
   port.onMessage.addListener((message) => {
     if (message?.type === "start") {
-      streamTranslate(port, message.text, message.context);
+      streamTranslate(port, message.text, message.context, message.wordMode);
     }
   });
 });
 
-async function streamTranslate(port, rawText, context) {
+async function streamTranslate(port, rawText, context, wordMode = false) {
   const abort = new AbortController();
   let disconnected = false;
   port.onDisconnect.addListener(() => {
@@ -182,7 +183,7 @@ async function streamTranslate(port, rawText, context) {
   };
 
   try {
-    const { settings, cacheKey, messages } = await prepareRequest(rawText, context);
+    const { settings, cacheKey, messages } = await prepareRequest(rawText, context, wordMode);
 
     const hit = cacheGet(cacheKey);
     if (hit) {
@@ -256,7 +257,8 @@ function buildTextMessages(text, lang) {
     {
       role: "system",
       content:
-        `Ты профессиональный переводчик. Переведи текст пользователя на ${lang} язык. ` +
+        `Ты профессиональный переводчик. Самостоятельно определи исходный язык и переведи текст пользователя на ${lang} язык. ` +
+        "Не считай английский исходным языком по умолчанию: текст может быть на любом языке или содержать несколько языков. " +
         "Верни ТОЛЬКО перевод: без кавычек, без пояснений, без исходного текста, без комментариев. " +
         "Сохраняй разметку абзацев, имена собственные и технические термины. " +
         `Если текст уже на ${lang}, верни его без изменений.`
@@ -272,16 +274,19 @@ function buildWordMessages(text, context, lang) {
     {
       role: "system",
       content:
-        `Ты профессиональный переводчик на ${lang} язык. Пользователь выделил фрагмент внутри предложения. ` +
-        "Предложение дано ТОЛЬКО как контекст — переводить его целиком не нужно.\n" +
+        `Ты профессиональный переводчик на ${lang} язык. Самостоятельно определи исходный язык выделенного фрагмента; не считай английский языком по умолчанию. ` +
+        "Контекст, если он дан, нужен ТОЛЬКО для определения значения — переводить его целиком не нужно.\n" +
+        "Сначала определи, является ли фрагмент существующим словом или устойчивым выражением исходного языка. Не выдавай имя, название, никнейм, бренд, опечатку или придуманное слово за обычное словарное слово.\n" +
         "Формат ответа строго такой:\n" +
-        "Первая строка — перевод выделенного фрагмента в том значении, в котором он употреблён в этом предложении. Только перевод, без кавычек и пояснений.\n" +
+        `Если слово или выражение существует, первая строка — перевод в подходящем по контексту значении. Только перевод, без кавычек и пояснений. Если фрагмент уже на ${lang} языке, верни его без изменений.\n` +
         "Вторая строка — если у фрагмента есть другие распространённые значения, напиши «другие значения: » и перечисли их через запятую. Если других значений нет или фрагмент однозначен, вторую строку не пиши вообще.\n" +
+        "Если фрагмент не является общеупотребительным словом или устойчивым выражением, первая строка должна быть строго: «Такого общеупотребительного слова не существует.»\n" +
+        "Во второй строке напиши «Возможно, это: » и дай одно короткое осторожное объяснение по написанию и контексту. Не выдумывай факты. Если ничего определить нельзя, напиши строго: «Возможно, это: имя собственное или название.»\n" +
         "Никакого другого текста в ответе быть не должно."
     },
     {
       role: "user",
-      content: `Предложение: ${context}\n\nВыделенный фрагмент: ${text}`
+      content: `${context ? `Контекст: ${context}\n\n` : "Контекст не предоставлен.\n\n"}Выделенный фрагмент: ${text}`
     }
   ];
 }

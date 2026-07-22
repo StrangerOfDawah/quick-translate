@@ -1,6 +1,6 @@
 # Chrome Web Store submission copy
 
-Use these values in the Chrome Web Store Developer Dashboard for version `1.2.0`.
+Use these values in the Chrome Web Store Developer Dashboard for version `1.3.0`.
 
 ## Store listing
 
@@ -29,16 +29,20 @@ Productivity
 
 **Detailed description**
 
-Sensemark помогает читать английские статьи, документацию и рабочие материалы, не покидая текущую страницу.
+Sensemark помогает читать статьи, документацию и рабочие материалы на разных языках, не покидая текущую страницу. Исходный язык определяется автоматически, а результат всегда выводится на русском.
 
 Выделите текст и нажмите ⌘⇧Y на Mac или Ctrl+Shift+Y на Windows. Перевод появится рядом с выделением и будет выводиться сразу по мере генерации. Также можно использовать контекстное меню или включить автоматический перевод при выделении.
 
 Если выделено одно слово или короткий фрагмент, расширение учитывает окружающее предложение, чтобы выбрать подходящее значение, и показывает другие распространённые варианты.
 
+Если фрагмент не является обычным словом — например, это название, имя, никнейм, бренд или опечатка — расширение не придумывает перевод, а показывает краткое осторожное объяснение по написанию и контексту.
+
 Возможности:
 
 - потоковый вывод без ожидания полного ответа;
 - перевод коротких фрагментов с учётом контекста;
+- автоматическое определение исходного языка;
+- объяснение неизвестных слов, имён и названий без выдуманного перевода;
 - светлая и тёмная тема;
 - изменение масштаба и размера карточки;
 - копирование перевода и просмотр оригинала;
@@ -106,8 +110,9 @@ The extension requires an OpenAI API key with available API balance.
 2. Review the data disclosure and select the consent checkbox.
 3. Paste the reviewer API key into “API-ключ OpenAI”.
 4. Click “Проверить ключ” and confirm that “Работает” appears.
-5. Open any regular HTTPS page, select an English sentence, and press Ctrl+Shift+Y (Windows/Linux) or Command+Shift+Y (macOS).
+5. Open any regular HTTPS page, select a sentence in English, Spanish, Arabic, or another language, and press Ctrl+Shift+Y (Windows/Linux) or Command+Shift+Y (macOS).
 6. Confirm that the Russian translation streams into a card next to the selection.
 7. Select a single ambiguous word inside a sentence and repeat; confirm that the context-specific translation and alternative meanings are displayed.
+8. Select an invented name such as “Sensemark”; confirm that the card says it is not a common word and offers a short possible explanation instead of inventing a translation.
 
 Do not commit a reviewer key to this repository. If reviewer credentials are supplied, create a dedicated OpenAI project/key with a small budget and place the credential only in the Dashboard's test-instructions field.

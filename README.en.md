@@ -30,6 +30,8 @@ Close the card mid-translation and the request aborts — unfinished tokens aren
 
 Selected a single word? The extension picks up the surrounding sentence and asks for the translation that fits *that* sentence. Other common meanings are listed underneath, in case you needed a different one.
 
+If the selection is not a common word — for example, it is a name, title, username, brand, or typo — Sensemark does not invent a translation. It says the word was not found and gives a brief, cautious explanation based on its spelling and context. If there is not enough information, it identifies the fragment as a likely proper name or title.
+
 <img src="docs/feature-context.png" alt="The word bank in two contexts: банк and берег">
 
 The card lives in a Shadow DOM, so site styles can't break it, and it follows the page's light or dark theme.

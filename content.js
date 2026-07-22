@@ -108,9 +108,10 @@
 
     // Для коротких фрагментов подтягиваем предложение вокруг — без него
     // многозначные слова переводятся наугад.
-    const context = isShort(text) ? extractContext(range, text) : null;
+    const wordMode = isShort(text);
+    const context = wordMode ? extractContext(range, text) : null;
 
-    return { text, rect, context };
+    return { text, rect, context, wordMode };
   }
 
   function isShort(text) {
@@ -213,7 +214,7 @@
 
       if (message.type === "chunk" || message.type === "done") {
         if (!started) {
-          beginStreamCard(info.text, Boolean(info.context));
+          beginStreamCard(info.text, info.wordMode);
           started = true;
         }
         updateStream(message.text);
@@ -237,7 +238,12 @@
       render(info.rect, { state: "error", message: "Соединение прервано — попробуйте ещё раз." });
     });
 
-    port.postMessage({ type: "start", text: info.text, context: info.context });
+    port.postMessage({
+      type: "start",
+      text: info.text,
+      context: info.context,
+      wordMode: info.wordMode
+    });
   }
 
   const ICONS = {
@@ -692,8 +698,8 @@
 
   // Каркас карточки для стриминга: текст пишется в .live, действия скрыты до конца.
   // wordMode — только для коротких фрагментов: там модель отдаёт перевод первой
-  // строкой и прочие значения второй. У обычного текста переносы строк — это
-  // просто абзацы, и разбирать их как «другие значения» нельзя.
+  // строкой, а ниже — другие значения или объяснение несловарного фрагмента.
+  // У обычного текста переносы строк — это просто абзацы, и разбирать их нельзя.
   function beginStreamCard(source, wordMode) {
     bodyEl.innerHTML = `
       <p class="tr"><span class="live"></span><span class="caret"></span></p>
@@ -705,15 +711,18 @@
         <button class="icon-btn" data-act="copy" title="Скопировать">${ICONS.copy}</button>
       </div>`;
 
-    streamState = {
+    const state = {
       main: "",
+      copyText: "",
       wordMode,
       live: bodyEl.querySelector(".live"),
       caret: bodyEl.querySelector(".caret"),
       alt: bodyEl.querySelector(".alt"),
+      altCap: bodyEl.querySelector(".alt .cap"),
       altT: bodyEl.querySelector(".alt-t"),
       acts: bodyEl.querySelector(".acts")
     };
+    streamState = state;
 
     const src = bodyEl.querySelector(".src");
     src.querySelector(".src-t").textContent = source || "";
@@ -730,7 +739,7 @@
 
     const copyBtn = bodyEl.querySelector("[data-act=copy]");
     copyBtn.addEventListener("click", async () => {
-      const ok = await copyText(streamState.main);
+      const ok = await copyText(state.copyText || state.main);
       copyBtn.classList.toggle("ok", ok);
       copyBtn.innerHTML = ok ? ICONS.check : ICONS.copy;
       setTimeout(() => {
@@ -746,6 +755,7 @@
     if (!streamState.wordMode) {
       // Обычный текст показываем как есть — переносы строк это абзацы оригинала.
       streamState.main = text;
+      streamState.copyText = text;
       streamState.live.textContent = text;
       return;
     }
@@ -753,12 +763,21 @@
     // Для слов модель возвращает перевод первой строкой, прочие значения — ниже.
     const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
     streamState.main = lines[0] || "";
+    streamState.copyText = streamState.main;
     streamState.live.textContent = streamState.main;
 
-    const alt = lines.slice(1).join(" ").replace(/^друг\S*\s+значения\s*:\s*/i, "");
-    if (alt) {
+    const secondary = lines.slice(1).join(" ");
+    const possible = secondary.match(/^возможно,?\s+это\s*:\s*(.+)$/i);
+    const meanings = secondary.match(/^друг\S*\s+значения\s*:\s*(.+)$/i);
+    if (possible) {
       streamState.alt.hidden = false;
-      streamState.altT.textContent = alt;
+      streamState.altCap.textContent = "Возможное объяснение";
+      streamState.altT.textContent = possible[1];
+      streamState.copyText = `${streamState.main}\nВозможно, это: ${possible[1]}`;
+    } else if (meanings) {
+      streamState.alt.hidden = false;
+      streamState.altCap.textContent = "Другие значения";
+      streamState.altT.textContent = meanings[1];
     }
   }
 
