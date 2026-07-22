@@ -2,13 +2,16 @@ const DEFAULTS = {
   apiKey: "",
   model: "gpt-4o-mini",
   targetLang: "русский",
-  autoTranslate: false
+  autoTranslate: false,
+  privacyConsentVersion: 0
 };
+const PRIVACY_CONSENT_VERSION = 1;
 
 const fields = {
   apiKey: document.getElementById("apiKey"),
   model: document.getElementById("model"),
-  autoTranslate: document.getElementById("autoTranslate")
+  autoTranslate: document.getElementById("autoTranslate"),
+  dataConsent: document.getElementById("dataConsent")
 };
 const testBtn = document.getElementById("test");
 const testStatus = document.getElementById("testStatus");
@@ -48,6 +51,7 @@ function init() {
     fields.apiKey.value = settings.apiKey;
     fields.model.value = settings.model;
     fields.autoTranslate.checked = settings.autoTranslate;
+    fields.dataConsent.checked = settings.privacyConsentVersion === PRIVACY_CONSENT_VERSION;
     fitKey();
   });
 
@@ -60,6 +64,14 @@ function init() {
   fields.apiKey.addEventListener("input", () => { fitKey(); scheduleSave(); });
   fields.model.addEventListener("change", scheduleSave);
   fields.autoTranslate.addEventListener("change", scheduleSave);
+  fields.dataConsent.addEventListener("change", () => {
+    save();
+    if (!fields.dataConsent.checked) {
+      setTestStatus("Согласие отозвано — запросы в OpenAI заблокированы", "err");
+    } else {
+      setTestStatus("");
+    }
+  });
 
   testBtn.addEventListener("click", runTest);
 
@@ -77,7 +89,8 @@ function collect() {
     model: fields.model.value.trim() || DEFAULTS.model,
     // Язык зафиксирован — поля ввода нет, чтобы в промпт не попал произвольный текст.
     targetLang: DEFAULTS.targetLang,
-    autoTranslate: fields.autoTranslate.checked
+    autoTranslate: fields.autoTranslate.checked,
+    privacyConsentVersion: fields.dataConsent.checked ? PRIVACY_CONSENT_VERSION : 0
   };
 }
 
@@ -105,6 +118,10 @@ function setTestStatus(message, kind = "") {
 
 async function runTest() {
   const settings = collect();
+  if (settings.privacyConsentVersion !== PRIVACY_CONSENT_VERSION) {
+    setTestStatus("Сначала подтвердите согласие на отправку текста", "err");
+    return;
+  }
   if (!settings.apiKey) {
     setTestStatus("Сначала введите ключ", "err");
     return;

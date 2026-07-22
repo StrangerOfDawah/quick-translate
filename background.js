@@ -1,11 +1,13 @@
 const MENU_ID = "translate-selection";
 const API_URL = "https://api.openai.com/v1/chat/completions";
+const PRIVACY_CONSENT_VERSION = 1;
 
 const DEFAULTS = {
   apiKey: "",
   model: "gpt-4o-mini",
   targetLang: "русский",
-  autoTranslate: false
+  autoTranslate: false,
+  privacyConsentVersion: 0
 };
 
 // Небольшой кэш, чтобы повторный перевод того же куска не стоил денег.
@@ -23,12 +25,25 @@ function cacheSet(key, value) {
   cache.set(key, value);
 }
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: MENU_ID,
-    title: "Перевести на русский",
-    contexts: ["selection"]
+chrome.runtime.onInstalled.addListener((details) => {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: MENU_ID,
+      title: "Перевести на русский",
+      contexts: ["selection"]
+    });
   });
+
+  // До первого перевода пользователь должен увидеть раскрытие обработки данных.
+  if (details.reason === "install") {
+    chrome.runtime.openOptionsPage();
+  } else if (details.reason === "update") {
+    chrome.storage.local.get({ privacyConsentVersion: 0 }).then((settings) => {
+      if (settings.privacyConsentVersion !== PRIVACY_CONSENT_VERSION) {
+        chrome.runtime.openOptionsPage();
+      }
+    });
+  }
 });
 
 chrome.action.onClicked.addListener(() => {
@@ -121,6 +136,11 @@ async function prepareRequest(rawText, context) {
   if (!text) throw new Error("Ничего не выделено.");
 
   const settings = await chrome.storage.local.get(DEFAULTS);
+  if (settings.privacyConsentVersion !== PRIVACY_CONSENT_VERSION) {
+    throw new Error(
+      "Перед переводом подтвердите отправку текста в OpenAI в настройках расширения."
+    );
+  }
   if (!settings.apiKey) {
     throw new Error("Не задан API-ключ. Откройте настройки расширения.");
   }
