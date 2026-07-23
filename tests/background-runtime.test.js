@@ -122,6 +122,33 @@ test("streaming translation emits cumulative chunks, completion, and cache hits"
   assert.equal(cachedPort.messages[0].text, "[[text]]\nПривет.");
 });
 
+test("parallel bilingual title accepts one streamed translation without a repair request", async () => {
+  let fetchCount = 0;
+  const background = loadBackground({
+    fetch: async () => {
+      fetchCount++;
+      return sseResponse([
+        'data: {"choices":[{"delta":{"content":"[[text]]\\nЯпонские детские сады"}}]}\n\n',
+        "data: [DONE]\n\n"
+      ]);
+    }
+  });
+  const port = createPort();
+
+  await background.streamTranslate(
+    port,
+    "Japanese Daycares – 日本の保育園",
+    null,
+    false,
+    ["Latin", "Japanese"]
+  );
+
+  assert.equal(fetchCount, 1);
+  assert.equal(port.messages.at(-1).type, "done");
+  assert.equal(port.messages.at(-1).text, "[[text]]\nЯпонские детские сады");
+  assert.equal(port.messages.some((message) => message.type === "error"), false);
+});
+
 test("disconnecting a stream aborts the fetch without surfacing an error", async () => {
   let capturedSignal = null;
   const background = loadBackground({

@@ -27,6 +27,44 @@ test("multiscript prompt requires a section for every detected script", () => {
   assert.match(prompt, /НИКОГДА не означает, что результат нужно писать этой письменностью/);
 });
 
+test("parallel bilingual titles may produce one natural translation", () => {
+  const { buildTextMessages, isParallelTitleCandidate, responseIssue } = loadBackground();
+  const source = "Japanese Daycares – 日本の保育園";
+  const scripts = ["Latin", "Japanese"];
+  const prompt = buildTextMessages(source, "русский", scripts)[0].content;
+
+  assert.equal(isParallelTitleCandidate(source, scripts), true);
+  assert.match(prompt, /короткий параллельный заголовок/);
+  assert.match(prompt, /один естественный перевод/);
+  assert.equal(
+    responseIssue("[[text]]\nЯпонские детские сады", false, scripts, source),
+    ""
+  );
+  assert.equal(
+    responseIssue(
+      "[[multilingual]]\n" +
+        "[[script:Latin|lang:английский]]\nЯпонские детские сады\n" +
+        "[[script:Japanese|lang:японский]]\nЯпонские детские сады",
+      false,
+      scripts,
+      source
+    ),
+    ""
+  );
+});
+
+test("ordinary multiscript prose still requires every source section", () => {
+  const { isParallelTitleCandidate, responseIssue } = loadBackground();
+  const source = "Read this English sentence. ثم اقرأ هذه الجملة العربية.";
+  const scripts = ["Latin", "Arabic"];
+
+  assert.equal(isParallelTitleCandidate(source, scripts), false);
+  assert.match(
+    responseIssue("[[text]]\nПрочитайте эти предложения.", false, scripts, source),
+    /\[\[multilingual\]\]/
+  );
+});
+
 test("response validation rejects skip and missing script sections", () => {
   const { responseIssue } = loadBackground();
 

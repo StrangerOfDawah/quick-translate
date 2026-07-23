@@ -304,6 +304,33 @@ function normalizeSourceScripts(scripts) {
   return [...new Set(scripts.filter((script) => /^[A-Za-z]+$/.test(script)))];
 }
 
+// Короткие заголовки часто продублированы на двух языках:
+// "Japanese Daycares – 日本の保育園". Для них естественнее один перевод,
+// а не две визуально одинаковые секции. Длинные абзацы сюда не попадают.
+function isParallelTitleCandidate(text, rawSourceScripts = []) {
+  const value = String(text || "").trim();
+  const sourceScripts = normalizeSourceScripts(rawSourceScripts);
+  if (sourceScripts.length !== 2 || !value || value.length > 160) return false;
+
+  let parts = value
+    .split(/\s+(?:[-–—|/·•])\s+|\n+/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length !== 2) {
+    const parenthetical = value.match(/^(.+?)\s*[（(]([^()（）]+)[）)]\s*$/u);
+    parts = parenthetical ? parenthetical.slice(1).map((part) => part.trim()) : [];
+  }
+
+  return (
+    parts.length === 2 &&
+    parts.every((part) => {
+      const letters = [...part].filter((char) => /\p{L}/u.test(char));
+      return letters.length >= 2 && letters.length <= 80 && !/[.!?。！？]\s+\p{L}/u.test(part);
+    })
+  );
+}
+
 function responsePayload(value) {
   return String(value || "")
     .split("\n")
@@ -388,6 +415,8 @@ function responseIssue(text, wordMode, rawSourceScripts = [], sourceText = "") {
 
   const sourceScripts = normalizeSourceScripts(rawSourceScripts);
   const multilingual = firstLine === "[[multilingual]]";
+  const unifiedParallelTitle =
+    firstLine === "[[text]]" && isParallelTitleCandidate(sourceText, sourceScripts);
   const declaredScripts = [
     ...value.matchAll(/^\[\[script\s*:\s*([^|\]]+)\s*\|/gim)
   ].map((match) => match[1].trim());
@@ -397,7 +426,7 @@ function responseIssue(text, wordMode, rawSourceScripts = [], sourceText = "") {
       ...new Set(unexpectedScripts)
     ].join(", ")}.`;
   }
-  if (sourceScripts.length > 1 && !multilingual) {
+  if (sourceScripts.length > 1 && !multilingual && !unifiedParallelTitle) {
     return "Для выделения с несколькими письменностями отсутствует формат [[multilingual]].";
   }
   if (sourceScripts.length < 2 && multilingual) {
@@ -441,8 +470,12 @@ async function repairResponse(
   sourceText,
   signal
 ) {
-  const required = sourceScripts.length > 1
+  const parallelTitle = isParallelTitleCandidate(sourceText, sourceScripts);
+  const required = sourceScripts.length > 1 && !parallelTitle
     ? ` Обязательно верни секции для всех письменностей: ${sourceScripts.join(", ")}.`
+    : "";
+  const unifiedOption = parallelTitle
+    ? " Если две короткие части являются одним параллельным заголовком, верни один русский перевод в формате [[text]]; иначе верни все секции [[multilingual]]."
     : "";
   const repairMessages = [
     ...messages,
@@ -450,7 +483,7 @@ async function repairResponse(
     {
       role: "user",
       content:
-        `Исправь ответ: ${issue}${required} Не пропускай ни один исходный фрагмент и не используй [[skip]]. ` +
+        `Исправь ответ: ${issue}${required}${unifiedOption} Не пропускай ни один исходный фрагмент и не используй [[skip]]. ` +
         "Все содержательные строки пиши только по-русски. Не повторяй иностранный оригинал, не переводи на третий язык, " +
         "не копируй текст инструкции и не добавляй подпись «Перевод:». Повтори весь ответ целиком строго в требуемом формате."
     }
@@ -486,7 +519,14 @@ function buildTextMessages(text, lang, rawSourceScripts = []) {
   const sourceScripts = normalizeSourceScripts(rawSourceScripts);
   const scriptList = sourceScripts.join(", ");
   const multiScript = sourceScripts.length > 1;
-  const format = multiScript
+  const parallelTitle = isParallelTitleCandidate(text, sourceScripts);
+  const format = parallelTitle
+    ? "Исходный текст похож на короткий параллельный заголовок, записанный двумя письменностями. " +
+      "Если обе части передают одно и то же название, первая строка ответа должна быть только [[text]], " +
+      `а со второй строки дай один естественный перевод на язык «${lang}» без дублирования. ` +
+      "Если значения частей различаются, используй [[multilingual]] и отдельные непустые секции " +
+      `[[script:SCRIPT|lang:LANGUAGE]] для каждой письменности из списка: ${scriptList}.`
+    : multiScript
     ? "В исходном выделении локально обнаружены письменности: " +
       `${scriptList}. Поэтому ответ ОБЯЗАТЕЛЬНО должен иметь формат:\n` +
       "[[multilingual]]\n" +
@@ -512,7 +552,9 @@ function buildTextMessages(text, lang, rawSourceScripts = []) {
         "не копируй формулировки этой инструкции и не добавляй подписи «Перевод:» или «Translation:».\n" +
         "Классический или коранический арабский переводи непосредственно с арабского с учётом грамматики и доступного контекста; не подменяй перевод толкованием или обратным переводом через другой язык.\n" +
         `${format}\n` +
-        "Создавай отдельную секцию для каждого последовательного предложения или блока исходного языка и сохраняй исходный порядок. Соседние фрагменты одного языка можно объединить. Не добавляй никаких пояснений вне секций."
+        (parallelTitle
+          ? "Не добавляй никаких пояснений вне выбранного формата."
+          : "Создавай отдельную секцию для каждого последовательного предложения или блока исходного языка и сохраняй исходный порядок. Соседние фрагменты одного языка можно объединить. Не добавляй никаких пояснений вне секций.")
     },
     { role: "user", content: text }
   ];
