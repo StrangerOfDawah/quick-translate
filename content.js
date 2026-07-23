@@ -43,6 +43,8 @@
   const VIEW_DEFAULTS = { uiScale: 1, cardWidth: 0, cardHeight: 0 };
   const SCALE_MIN = 0.75;
   const SCALE_MAX = 2.2;
+  const SCALE_STEP = 0.02;
+  const SCALE_INTERVAL_MS = 70;
   const WIDTH_MIN = 230; // совпадает с min-width карточки в CSS
   const HEIGHT_MIN = 120;
 
@@ -538,7 +540,10 @@
         .card.in {
           opacity: 1;
           animation: pop 0.34s cubic-bezier(0.21, 1.02, 0.36, 1);
-          transition: top 0.28s cubic-bezier(0.32, 0.72, 0, 1), left 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+          transition:
+            top 0.28s cubic-bezier(0.32, 0.72, 0, 1),
+            left 0.28s cubic-bezier(0.32, 0.72, 0, 1),
+            font-size 0.09s ease-out;
         }
         .card.out {
           opacity: 0;
@@ -887,14 +892,25 @@
 
   // Cmd/Ctrl + колесо — масштаб карточки. preventDefault обязателен,
   // иначе браузер зумит всю страницу.
+  let lastScaleAt = -Infinity;
+  let scalePositionTimer = null;
   function setupZoom() {
+    lastScaleAt = -Infinity;
     card.addEventListener(
       "wheel",
       (event) => {
         if (!event.metaKey && !event.ctrlKey) return;
         event.preventDefault();
+        if (!event.deltaY) return;
 
-        const step = event.deltaY > 0 ? -0.08 : 0.08;
+        // Трекпад отправляет десятки wheel-событий за одно движение. Раньше
+        // каждое из них меняло масштаб сразу на 8%, поэтому карточка улетала.
+        // Принимаем не чаще одного небольшого шага за интервал.
+        const now = performance.now();
+        if (now - lastScaleAt < SCALE_INTERVAL_MS) return;
+        lastScaleAt = now;
+
+        const step = event.deltaY > 0 ? -SCALE_STEP : SCALE_STEP;
         const next = Math.min(SCALE_MAX, Math.max(SCALE_MIN, view.uiScale + step));
         if (next === view.uiScale) return;
 
@@ -902,7 +918,14 @@
         applyView();
         showZoom();
         saveView();
-        if (lastRect) position(lastRect);
+
+        // Во время жеста сохраняем верхний левый угол стабильным. После паузы
+        // мягко возвращаем карточку к выделению и внутрь границ экрана.
+        clearTimeout(scalePositionTimer);
+        scalePositionTimer = setTimeout(() => {
+          scalePositionTimer = null;
+          if (host && lastRect) position(lastRect);
+        }, 180);
       },
       { passive: false }
     );
@@ -1232,6 +1255,8 @@
 
   function close({ cancelRequest = true, animate = true } = {}) {
     if (!host) return;
+    clearTimeout(scalePositionTimer);
+    scalePositionTimer = null;
     if (cancelRequest) {
       requestId++; // отменяем ответ на текущий запрос
       currentPort?.disconnect(); // background оборвёт fetch и не будет жечь токены

@@ -46,7 +46,7 @@ The card lives in a Shadow DOM, so site styles can't break it, and it follows th
 
 <img src="docs/feature-size.png" alt="The card at 100% and 160% scale">
 
-The whole card scales, not just the font — padding, buttons and icons grow with the text. The corner grip resizes it, a double-click resets everything. The setting persists across every page.
+The whole card scales, not just the font — padding, buttons and icons grow with the text. <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + wheel uses small, smoothly animated steps with a trackpad rate limit. The corner grip resizes it, a double-click resets everything. The setting persists across every page.
 
 <br>
 

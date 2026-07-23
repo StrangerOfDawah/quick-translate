@@ -233,12 +233,55 @@
       document.querySelectorAll("[data-case]").forEach((button) => {
         button.addEventListener("click", () => window.showPreviewCase(button.dataset.case));
       });
+      function runZoomBurst(attempt = 0) {
+        const host = document.getElementById("__gpt_translate_popup_host__");
+        const card = host?.shadowRoot?.querySelector(".card");
+        const zoom = host?.shadowRoot?.querySelector(".zoom");
+        if (!card || !zoom) {
+          if (attempt < 10) setTimeout(() => runZoomBurst(attempt + 1), 50);
+          return;
+        }
+
+        const fire = (deltaY, modifier = "ctrl") => {
+          card.dispatchEvent(
+            new WheelEvent("wheel", {
+              deltaY,
+              ctrlKey: modifier === "ctrl",
+              metaKey: modifier === "meta",
+              bubbles: true,
+              cancelable: true
+            })
+          );
+        };
+
+        document.documentElement.dataset.zoomLeftBefore = card.style.left;
+        for (let index = 0; index < 20; index++) fire(-12);
+        document.documentElement.dataset.zoomAfterBurst = zoom.textContent;
+        document.documentElement.dataset.zoomLeftAfterBurst = card.style.left;
+
+        setTimeout(() => {
+          fire(-12);
+          document.documentElement.dataset.zoomAfterSecond = zoom.textContent;
+          document.documentElement.dataset.zoomLeftAfterSecond = card.style.left;
+        }, 90);
+        setTimeout(() => {
+          fire(12, "meta");
+          document.documentElement.dataset.zoomAfterReverse = zoom.textContent;
+          document.documentElement.dataset.zoomLeftAfterReverse = card.style.left;
+        }, 180);
+        setTimeout(() => {
+          document.documentElement.dataset.zoomLeftAfterSettle = card.style.left;
+        }, 400);
+      }
+
       window.addEventListener(
         "load",
         () => {
-          if (!new URLSearchParams(location.search).has("manual")) {
+          const params = new URLSearchParams(location.search);
+          if (!params.has("manual")) {
             requestAnimationFrame(() => window.showPreviewCase("translation"));
           }
+          if (params.has("zoom-burst")) setTimeout(() => runZoomBurst(), 100);
         },
         { once: true }
       );
