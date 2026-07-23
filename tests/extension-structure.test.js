@@ -24,6 +24,17 @@ test("toolbar action opens the manual popup with only packaged scripts", () => {
     ]
   );
   assert.equal([...document.querySelectorAll("script")].some((script) => !script.src), false);
+  assert.equal(document.getElementById("translateButton"), null);
+  assert.ok(document.getElementById("activity"));
+
+  const popupRuntime = read("popup.js");
+  assert.match(popupRuntime, /insertFromPaste/);
+  assert.match(popupRuntime, /autoTranslateDelayMs/);
+
+  const popupStyles = read("popup.css");
+  assert.match(popupStyles, /border-radius:\s*28px/);
+  assert.match(popupStyles, /\.clear-button\[hidden\]\s*{\s*display:\s*none/);
+  assert.doesNotMatch(popupStyles, /min-height:\s*470px/);
 });
 
 test("content runtime declares every helper in manifest and fallback injection", () => {

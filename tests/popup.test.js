@@ -91,7 +91,9 @@ async function setupPopup(overrides = {}) {
     document: dom.window.document,
     chrome,
     navigator,
-    window: dom.window
+    window: dom.window,
+    autoTranslateDelayMs: overrides.autoTranslateDelayMs ?? 60_000,
+    pasteTranslateDelayMs: overrides.pasteTranslateDelayMs ?? 60_000
   });
   await controller.init();
 
@@ -109,12 +111,19 @@ async function setupPopup(overrides = {}) {
   };
 }
 
-function setInput(context, value) {
+function setInput(context, value, inputType = "insertText") {
   const input = context.document.getElementById("sourceText");
   input.value = value;
-  input.dispatchEvent(new context.dom.window.Event("input", { bubbles: true }));
+  input.dispatchEvent(
+    new context.dom.window.InputEvent("input", {
+      bubbles: true,
+      inputType
+    })
+  );
   return input;
 }
+
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 test("popup blocks translation until privacy and API settings are ready", async () => {
   const context = await setupPopup({
@@ -123,9 +132,36 @@ test("popup blocks translation until privacy and API settings are ready", async 
 
   setInput(context, "Hello");
   assert.equal(context.document.getElementById("setupBanner").hidden, false);
-  assert.equal(context.document.getElementById("translateButton").disabled, true);
+  assert.equal(context.document.getElementById("translateButton"), null);
+  assert.equal(context.controller.getState().scheduled, false);
+  assert.equal(context.ports.length, 0);
   context.document.getElementById("setupButton").click();
   assert.equal(context.optionsOpened, 1);
+});
+
+test("popup automatically translates pasted text without a translate button", async () => {
+  const context = await setupPopup({ pasteTranslateDelayMs: 5 });
+
+  setInput(context, "Hello from the clipboard.", "insertFromPaste");
+  assert.equal(context.document.getElementById("translateButton"), null);
+  assert.equal(context.controller.getState().scheduled, true);
+
+  await wait(15);
+  assert.equal(context.ports.length, 1);
+  assert.equal(context.ports[0].posted[0].text, "Hello from the clipboard.");
+});
+
+test("popup debounces typing into one token-saving request", async () => {
+  const context = await setupPopup({ autoTranslateDelayMs: 12 });
+
+  setInput(context, "Hello");
+  setInput(context, "Hello world");
+  setInput(context, "Hello world.");
+  assert.equal(context.ports.length, 0);
+  await wait(25);
+
+  assert.equal(context.ports.length, 1);
+  assert.equal(context.ports[0].posted[0].text, "Hello world.");
 });
 
 test("popup ignores Russian manual input without opening an API port", async () => {
@@ -141,7 +177,7 @@ test("popup ignores Russian manual input without opening an API port", async () 
 
   assert.equal(context.ports.length, 0);
   assert.match(context.document.getElementById("message").textContent, /уже на русском/);
-  assert.match(context.document.getElementById("status").textContent, /API не потребовался/);
+  assert.match(context.document.getElementById("status").textContent, /Уже на русском/);
 });
 
 test("popup streams a word translation without exposing protocol markers", async () => {
@@ -172,7 +208,7 @@ test("popup streams a word translation without exposing protocol markers", async
   });
   assert.equal(context.document.querySelector(".translation-text").textContent, "почему");
   assert.equal(context.document.querySelector(".detail-text").textContent, "зачем");
-  assert.equal(context.document.getElementById("translateButton").classList.contains("busy"), false);
+  assert.equal(context.document.getElementById("activity").classList.contains("busy"), false);
   assert.equal(port.disconnected, true);
 
   await context.controller.copyResult();
@@ -218,7 +254,7 @@ test("popup renders unknown terms in the amber explanation state", async () => {
   assert.equal(context.document.querySelector(".reference-category").textContent, "название");
 });
 
-test("popup aborts a stale stream when the user edits or stops", async () => {
+test("popup aborts stale work when the user edits or clears the field", async () => {
   const context = await setupPopup();
   setInput(context, "Translate this sentence, please.");
   await context.controller.translate();
@@ -227,12 +263,11 @@ test("popup aborts a stale stream when the user edits or stops", async () => {
   setInput(context, "A different sentence.");
   assert.equal(firstPort.disconnected, true);
   assert.equal(context.controller.getState().busy, false);
+  assert.equal(context.controller.getState().scheduled, true);
 
-  await context.controller.translate();
-  const secondPort = context.ports[1];
-  await context.controller.translate();
-  assert.equal(secondPort.disconnected, true);
-  assert.match(context.document.getElementById("message").textContent, /остановлен/);
+  context.controller.clear();
+  assert.equal(context.controller.getState().scheduled, false);
+  assert.equal(context.document.getElementById("sourceText").value, "");
 });
 
 test("popup surfaces model errors and unexpected disconnects", async () => {
@@ -253,10 +288,12 @@ test("popup reacts to settings changes and supports the keyboard shortcut", asyn
     settings: { apiKey: "", privacyConsentVersion: 1 }
   });
   setInput(context, "Hello");
-  assert.equal(context.document.getElementById("translateButton").disabled, true);
+  assert.equal(context.document.getElementById("setupBanner").hidden, false);
+  assert.equal(context.controller.getState().scheduled, false);
 
   context.storageChanges.emit({ apiKey: { newValue: "new-key" } }, "local");
-  assert.equal(context.document.getElementById("translateButton").disabled, false);
+  assert.equal(context.document.getElementById("setupBanner").hidden, true);
+  assert.equal(context.controller.getState().scheduled, true);
 
   context.document.getElementById("sourceText").dispatchEvent(
     new context.dom.window.KeyboardEvent("keydown", {

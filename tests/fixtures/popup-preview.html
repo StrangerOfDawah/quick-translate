@@ -21,11 +21,12 @@
       }
 
       iframe {
-        width: 380px;
-        height: 680px;
+        width: 368px;
+        height: 240px;
         border: 0;
-        border-radius: 18px;
+        border-radius: 30px;
         box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+        transition: height 180ms ease;
       }
     </style>
   </head>
@@ -40,6 +41,11 @@
         const source = document.getElementById("sourceText");
         const result = document.getElementById("result");
         const resultBody = document.getElementById("resultBody");
+        const fitFrame = () => {
+          requestAnimationFrame(() => {
+            frame.style.height = `${document.body.scrollHeight}px`;
+          });
+        };
 
         source.value =
           requestedState === "reference"
@@ -63,6 +69,7 @@
               <p class="detail-text">Вероятно, это имя продукта или проекта, образованное от английских слов sense и mark.</p>
             </div>
           `;
+          fitFrame();
           return;
         }
 
@@ -78,6 +85,7 @@
             <p class="segment-text">Это Писание, в котором нет сомнения.</p>
           </section>
         `;
+        fitFrame();
       });
     </script>
   </body>

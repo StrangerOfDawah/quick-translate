@@ -80,8 +80,8 @@ function validateHtml(file, requiredIds = []) {
 
 validateHtml("popup.html", [
   "sourceText",
-  "translateButton",
   "clearButton",
+  "activity",
   "settingsButton",
   "setupBanner",
   "result",

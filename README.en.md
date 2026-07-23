@@ -32,9 +32,9 @@ Close the card mid-translation and the request aborts — unfinished tokens aren
 
 ## When selection does not work
 
-Click the Sensemark toolbar icon to open a compact manual-translation popup. Paste up to 5000 characters and start with the button or <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd>.
+Click the Sensemark toolbar icon to open a compact manual-translation popup. Paste up to 5000 characters: translation starts automatically after a paste or a short typing pause, with no extra button.
 
-Manual mode reuses the same streaming request, local Russian-text guard, multilingual sections, and amber explanation state for names and unknown terms. Results can be copied, and editing the source or pressing stop aborts the unfinished API request immediately.
+Manual mode reuses the same streaming request, local Russian-text guard, multilingual sections, and amber explanation state for names and unknown terms. Results can be copied, and editing or clearing the source aborts the unfinished API request immediately.
 
 <br>
 
@@ -106,7 +106,7 @@ You need an OpenAI API key. This is **not** a ChatGPT Plus subscription — that
 | Keyboard shortcut | Select text → <kbd>⌘</kbd><kbd>⇧</kbd><kbd>Y</kbd> (Mac) or <kbd>Ctrl</kbd><kbd>⇧</kbd><kbd>Y</kbd> (Windows) |
 | Context menu | Select text → right-click → «Перевести на русский» |
 | Automatic | Enable the toggle in settings — translates on any mouse selection |
-| Manual | Click the extension icon → paste text → «Перевести» |
+| Manual | Click the extension icon → paste text; translation starts automatically |
 | Scale | <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + scroll over the card |
 
 In the card: the icon button copies the translation, «Оригинал» expands the source text. Close it with <kbd>Esc</kbd>, the ×, a click outside, or by scrolling.

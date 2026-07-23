@@ -28,13 +28,16 @@
     const chrome = environment.chrome;
     const navigator = environment.navigator || {};
     const window = environment.window || {};
+    const autoTranslateDelayMs = environment.autoTranslateDelayMs ?? 850;
+    const pasteTranslateDelayMs = environment.pasteTranslateDelayMs ?? 60;
+    const scheduleTimeout = window.setTimeout?.bind(window) || setTimeout;
+    const cancelTimeout = window.clearTimeout?.bind(window) || clearTimeout;
 
     const elements = {
       source: document.getElementById("sourceText"),
-      translate: document.getElementById("translateButton"),
-      translateLabel: document.querySelector("#translateButton .translate-label"),
       clear: document.getElementById("clearButton"),
       count: document.getElementById("charCount"),
+      activity: document.getElementById("activity"),
       settings: document.getElementById("settingsButton"),
       setup: document.getElementById("setupBanner"),
       setupText: document.getElementById("setupText"),
@@ -45,8 +48,7 @@
       resultBody: document.getElementById("resultBody"),
       copy: document.getElementById("copyButton"),
       copyLabel: document.querySelector("#copyButton span"),
-      status: document.getElementById("status"),
-      shortcut: document.querySelector(".shortcut")
+      status: document.getElementById("status")
     };
 
     if (Object.values(elements).some((element) => !element)) {
@@ -60,6 +62,8 @@
     let busy = false;
     let copyValue = "";
     let initialized = false;
+    let autoTimer = null;
+    let pastePending = false;
 
     const createElement = (tag, className = "", text = "") => {
       const element = document.createElement(tag);
@@ -76,8 +80,10 @@
       }
     }
 
-    function setStatus(message) {
+    function setStatus(message, kind = "") {
       elements.status.textContent = message;
+      const state = kind || (busy ? "busy" : "");
+      elements.activity.className = `activity${state ? ` ${state}` : ""}`;
     }
 
     function showMessage(message, kind = "") {
@@ -106,10 +112,7 @@
     function refreshControls() {
       const hasText = Boolean(elements.source.value.trim());
       elements.clear.hidden = !hasText;
-      elements.translate.disabled = !busy && (!hasText || Boolean(setupIssue));
-      elements.translate.classList.toggle("busy", busy);
-      elements.translateLabel.textContent = busy ? "Остановить" : "Перевести";
-      elements.translate.setAttribute("aria-label", busy ? "Остановить перевод" : "Перевести");
+      elements.activity.classList.toggle("busy", busy);
     }
 
     function updateCount() {
@@ -123,7 +126,14 @@
       refreshControls();
     }
 
-    function cancelActive(announce = false) {
+    function clearScheduled() {
+      if (autoTimer === null) return;
+      cancelTimeout(autoTimer);
+      autoTimer = null;
+    }
+
+    function cancelActive(announce = false, cancelScheduled = true) {
+      if (cancelScheduled) clearScheduled();
       requestId++;
       const port = currentPort;
       currentPort = null;
@@ -136,7 +146,7 @@
         }
       }
       if (announce) {
-        setStatus("Перевод остановлен");
+        setStatus("Перевод остановлен", "error");
         showMessage("Запрос остановлен — незавершённая генерация отменена.");
       }
     }
@@ -207,7 +217,7 @@
 
     function fail(message) {
       setBusy(false);
-      setStatus("Нужна проверка");
+      setStatus("Нужна проверка", "error");
       clearResult();
       showMessage(message || "Не удалось выполнить перевод.", "error");
     }
@@ -239,7 +249,7 @@
           if (view.visible) {
             visible = true;
             renderView(view);
-            setStatus(message.type === "done" ? "Готово" : "Перевод поступает…");
+            setStatus(message.type === "done" ? "Готово" : "Перевод поступает…", message.type === "done" ? "" : "busy");
           }
 
           if (message.type === "done") {
@@ -281,16 +291,14 @@
     }
 
     async function translate() {
-      if (busy) {
-        cancelActive(true);
-        return;
-      }
+      clearScheduled();
       if (setupIssue) {
+        setStatus("Требуется настройка", "error");
         showMessage(setupIssue.message, "error");
         return;
       }
 
-      cancelActive(false);
+      cancelActive(false, false);
       const id = ++requestId;
       clearResult();
       showMessage("");
@@ -312,7 +320,7 @@
       }
       if (plan.kind === "russian") {
         setBusy(false);
-        setStatus("Запрос к API не потребовался");
+        setStatus("Уже на русском", "local");
         showMessage("Текст уже на русском — перевод не требуется.", "local");
         return;
       }
@@ -358,24 +366,49 @@
       updateCount();
       clearResult();
       showMessage("");
-      setStatus("Готов к переводу");
+      setStatus("Вставьте текст");
       elements.source.focus();
     }
 
-    function onInput() {
-      if (busy) cancelActive(false);
+    function scheduleAutoTranslate(fromPaste = false) {
+      clearScheduled();
+      const expectedText = elements.source.value.trim();
+      if (!expectedText) {
+        setStatus("Вставьте текст");
+        return;
+      }
+      if (setupIssue) {
+        setStatus("Требуется настройка", "error");
+        return;
+      }
+
+      const delay = fromPaste ? pasteTranslateDelayMs : autoTranslateDelayMs;
+      setStatus(fromPaste ? "Вставка получена…" : "Жду окончания ввода…");
+      autoTimer = scheduleTimeout(() => {
+        autoTimer = null;
+        if (elements.source.value.trim() !== expectedText) return;
+        translate();
+      }, delay);
+    }
+
+    function onInput(event) {
+      cancelActive(false);
       clearResult();
       showMessage("");
-      setStatus("Готов к переводу");
       updateCount();
+      const fromPaste = pastePending || event?.inputType === "insertFromPaste";
+      pastePending = false;
+      scheduleAutoTranslate(fromPaste);
     }
 
     function bind() {
-      elements.translate.addEventListener("click", translate);
       elements.clear.addEventListener("click", clear);
       elements.copy.addEventListener("click", copyResult);
       elements.settings.addEventListener("click", openSettings);
       elements.setupButton.addEventListener("click", openSettings);
+      elements.source.addEventListener("paste", () => {
+        pastePending = true;
+      });
       elements.source.addEventListener("input", onInput);
       elements.source.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -386,10 +419,14 @@
       window.addEventListener?.("unload", () => cancelActive(false), { once: true });
       chrome.storage?.onChanged?.addListener?.((changes, area) => {
         if (area !== "local") return;
+        const hadSetupIssue = Boolean(setupIssue);
         for (const key of Object.keys(manual.SETTINGS_DEFAULTS)) {
           if (changes[key]) settings[key] = changes[key].newValue;
         }
         applySetupState();
+        if (hadSetupIssue && !setupIssue && elements.source.value.trim()) {
+          scheduleAutoTranslate(false);
+        }
       });
     }
 
@@ -403,7 +440,7 @@
       try {
         settings = await chrome.storage.local.get(manual.SETTINGS_DEFAULTS);
         applySetupState();
-        setStatus(setupIssue ? "Требуется настройка" : "Готов к переводу");
+        setStatus(setupIssue ? "Требуется настройка" : "Вставьте текст", setupIssue ? "error" : "");
       } catch {
         setupIssue = {
           code: "storage",
@@ -415,8 +452,6 @@
         setStatus("Настройки недоступны");
       }
 
-      const isMac = /Mac/i.test(navigator.platform || "");
-      elements.shortcut.firstElementChild.textContent = isMac ? "⌘" : "Ctrl";
       elements.source.focus();
     }
 
@@ -428,6 +463,7 @@
         busy,
         copyValue,
         currentPort,
+        scheduled: autoTimer !== null,
         requestId,
         settings: { ...settings },
         setupIssue

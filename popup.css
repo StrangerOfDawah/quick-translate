@@ -1,35 +1,32 @@
 :root {
   color-scheme: dark light;
-  --bg: #080911;
-  --panel: rgba(22, 24, 39, 0.78);
-  --panel-strong: rgba(29, 31, 49, 0.9);
-  --field: rgba(6, 8, 18, 0.58);
+  --canvas: rgba(10, 11, 19, 0.94);
+  --panel: rgba(255, 255, 255, 0.065);
+  --panel-strong: rgba(255, 255, 255, 0.09);
   --text: #f7f7fb;
-  --muted: #969aad;
-  --faint: #676b80;
-  --hair: rgba(255, 255, 255, 0.09);
-  --edge: rgba(255, 255, 255, 0.15);
-  --cyan: #64d2ff;
-  --indigo: #6f6cff;
-  --violet: #bf5af2;
-  --amber: #ffb340;
-  --red: #ff6961;
-  --green: #3ddc84;
-  --gradient: linear-gradient(135deg, var(--cyan), var(--indigo) 52%, var(--violet));
+  --muted: #9c9eac;
+  --faint: #696c7b;
+  --hair: rgba(255, 255, 255, 0.085);
+  --edge: rgba(255, 255, 255, 0.14);
+  --blue: #6bc9ff;
+  --indigo: #7b78ff;
+  --violet: #bd72ff;
+  --amber: #ffb547;
+  --red: #ff6b67;
+  --green: #4bd98a;
   font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #eef1f9;
-    --panel: rgba(255, 255, 255, 0.76);
-    --panel-strong: rgba(255, 255, 255, 0.94);
-    --field: rgba(247, 248, 253, 0.86);
-    --text: #161824;
-    --muted: #6f7386;
-    --faint: #9a9db0;
-    --hair: rgba(28, 32, 60, 0.09);
-    --edge: rgba(255, 255, 255, 0.92);
+    --canvas: rgba(246, 247, 252, 0.96);
+    --panel: rgba(255, 255, 255, 0.72);
+    --panel-strong: rgba(255, 255, 255, 0.9);
+    --text: #171822;
+    --muted: #696c7a;
+    --faint: #9799a6;
+    --hair: rgba(24, 26, 42, 0.08);
+    --edge: rgba(255, 255, 255, 0.94);
   }
 }
 
@@ -39,18 +36,15 @@
 
 html,
 body {
-  width: 380px;
-  min-height: 470px;
+  width: 368px;
   margin: 0;
+  background: transparent;
 }
 
 body {
   position: relative;
-  overflow-x: hidden;
-  background:
-    radial-gradient(circle at 8% 0%, rgba(45, 105, 255, 0.2), transparent 42%),
-    radial-gradient(circle at 100% 82%, rgba(191, 90, 242, 0.14), transparent 42%),
-    var(--bg);
+  overflow: hidden;
+  padding: 6px;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
 }
@@ -66,41 +60,58 @@ button {
 
 .ambient {
   position: fixed;
-  inset: 0;
+  inset: 6px;
   z-index: 0;
   overflow: hidden;
+  border-radius: 28px;
   pointer-events: none;
 }
 
-.ambient i {
+.ambient::before,
+.ambient::after {
   position: absolute;
-  width: 190px;
-  height: 190px;
+  width: 180px;
+  height: 180px;
   border-radius: 50%;
-  filter: blur(72px);
-  opacity: 0.19;
+  filter: blur(68px);
+  opacity: 0.2;
+  content: "";
 }
 
-.ambient i:first-child {
-  top: -95px;
-  left: -55px;
-  background: #237cff;
+.ambient::before {
+  top: -120px;
+  left: -65px;
+  background: #1879ff;
 }
 
-.ambient i:last-child {
-  right: -95px;
-  bottom: -70px;
-  background: #b64fff;
+.ambient::after {
+  right: -110px;
+  bottom: -105px;
+  background: #a84dff;
+}
+
+.ambient i {
+  display: none;
 }
 
 .shell {
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 11px;
+  gap: 9px;
   width: 100%;
-  min-height: 470px;
-  padding: 14px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--edge);
+  border-radius: 28px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 42%),
+    var(--canvas);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 42px rgba(0, 0, 0, 0.38);
+  -webkit-backdrop-filter: blur(38px) saturate(1.45);
+  backdrop-filter: blur(38px) saturate(1.45);
 }
 
 .topbar,
@@ -108,47 +119,41 @@ button {
 .composer-head,
 .composer-foot,
 .result-head,
-.foot,
 .route,
 .copy-button,
-.translate-button {
+.clear-button,
+.activity {
   display: flex;
   align-items: center;
 }
 
 .topbar {
   justify-content: space-between;
-  min-height: 38px;
-  padding: 0 2px 1px;
+  min-height: 34px;
+  padding: 0 2px;
 }
 
 .brand {
-  gap: 10px;
+  gap: 9px;
 }
 
 .brand-orb {
   position: relative;
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 31px;
+  height: 31px;
   place-items: center;
   border: 1px solid var(--edge);
-  border-radius: 12px;
+  border-radius: 11px;
   background: rgba(255, 255, 255, 0.055);
-  box-shadow: inset 0 1px 0 var(--edge), 0 7px 24px rgba(55, 84, 255, 0.2);
-}
-
-.brand-orb::after {
-  position: absolute;
-  inset: -3px;
-  border: 1px solid rgba(100, 210, 255, 0.16);
-  border-radius: 14px;
-  content: "";
+  box-shadow:
+    inset 0 1px 0 var(--edge),
+    0 7px 20px rgba(67, 86, 255, 0.18);
 }
 
 .brand-orb img {
-  width: 25px;
-  height: 25px;
+  width: 23px;
+  height: 23px;
 }
 
 .brand strong,
@@ -157,15 +162,15 @@ button {
 }
 
 .brand strong {
-  font-size: 14px;
+  font-size: 13.5px;
   letter-spacing: -0.015em;
 }
 
 .brand small {
   margin-top: 1px;
   color: var(--muted);
-  font-size: 10.5px;
-  letter-spacing: 0.025em;
+  font-size: 10px;
+  letter-spacing: 0.015em;
 }
 
 .online-dot {
@@ -175,14 +180,13 @@ button {
   margin-right: 4px;
   border-radius: 50%;
   background: var(--green);
-  box-shadow: 0 0 9px rgba(61, 220, 132, 0.75);
+  box-shadow: 0 0 8px rgba(75, 217, 138, 0.65);
   vertical-align: 1px;
 }
 
 .icon-button,
 .clear-button,
 .copy-button,
-.translate-button,
 .setup-banner button {
   border: 0;
   cursor: pointer;
@@ -190,11 +194,11 @@ button {
 
 .icon-button {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 50%;
   background: transparent;
   color: var(--muted);
   transition: 0.16s ease;
@@ -203,13 +207,13 @@ button {
 .icon-button:hover,
 .icon-button:focus-visible {
   border-color: var(--hair);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.065);
   color: var(--text);
   outline: none;
 }
 
 .icon-button svg {
-  width: 17px;
+  width: 16px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -220,12 +224,12 @@ button {
 .setup-banner {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 9px;
+  gap: 8px;
   align-items: center;
-  padding: 9px 10px;
-  border: 1px solid color-mix(in srgb, var(--amber) 28%, transparent);
-  border-radius: 13px;
-  background: color-mix(in srgb, var(--amber) 8%, var(--panel));
+  padding: 8px 9px;
+  border: 1px solid color-mix(in srgb, var(--amber) 24%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--amber) 7%, var(--panel));
 }
 
 .setup-banner[hidden] {
@@ -234,52 +238,63 @@ button {
 
 .setup-icon {
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
   place-items: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--amber) 18%, transparent);
+  background: color-mix(in srgb, var(--amber) 17%, transparent);
   color: var(--amber);
+  font-size: 11px;
   font-weight: 750;
 }
 
 .setup-banner p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10.5px;
 }
 
 .setup-banner button {
-  padding: 5px 8px;
-  border-radius: 8px;
-  background: transparent;
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
   color: var(--amber);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 650;
 }
 
 .composer,
 .result {
   border: 1px solid transparent;
-  border-radius: 18px;
+  border-radius: 23px;
   background:
     linear-gradient(var(--panel), var(--panel)) padding-box,
-    linear-gradient(135deg, rgba(100, 210, 255, 0.32), rgba(111, 108, 255, 0.17), rgba(191, 90, 242, 0.28)) border-box;
-  box-shadow: inset 0 1px 0 var(--edge), 0 14px 35px rgba(0, 0, 0, 0.18);
-  -webkit-backdrop-filter: blur(24px) saturate(1.45);
-  backdrop-filter: blur(24px) saturate(1.45);
+    linear-gradient(
+        145deg,
+        rgba(255, 255, 255, 0.22),
+        rgba(116, 120, 255, 0.13) 48%,
+        rgba(189, 114, 255, 0.23)
+      )
+      border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 10px 28px rgba(0, 0, 0, 0.15);
 }
 
 .composer {
-  padding: 13px 13px 11px;
+  padding: 12px;
+  transition: box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .composer:focus-within {
+  background:
+    linear-gradient(var(--panel-strong), var(--panel-strong)) padding-box,
+    linear-gradient(145deg, rgba(107, 201, 255, 0.52), rgba(123, 120, 255, 0.2), rgba(189, 114, 255, 0.38))
+      border-box;
   box-shadow:
-    inset 0 1px 0 var(--edge),
-    0 0 0 1px rgba(100, 210, 255, 0.12),
-    0 18px 40px rgba(0, 0, 0, 0.2),
-    0 0 27px rgba(89, 87, 230, 0.1);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 13px 34px rgba(0, 0, 0, 0.18),
+    0 0 26px rgba(94, 101, 255, 0.08);
 }
 
 .composer-head,
@@ -289,16 +304,16 @@ button {
 
 .eyebrow {
   color: var(--muted);
-  font-size: 9.5px;
+  font-size: 9px;
   font-weight: 720;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .route {
-  gap: 6px;
+  gap: 5px;
   color: var(--faint);
-  font-size: 10px;
+  font-size: 9.5px;
 }
 
 .route b {
@@ -314,16 +329,17 @@ button {
 textarea {
   display: block;
   width: 100%;
-  min-height: 118px;
-  max-height: 190px;
-  margin: 9px 0 8px;
+  min-height: 76px;
+  max-height: 150px;
+  margin: 8px 0 7px;
   padding: 0;
-  resize: vertical;
+  resize: none;
+  overflow-y: auto;
   border: 0;
   background: transparent;
   color: var(--text);
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 14.5px;
+  line-height: 1.5;
   outline: none;
   scrollbar-width: thin;
 }
@@ -333,121 +349,98 @@ textarea::placeholder {
 }
 
 .composer-foot {
-  min-height: 34px;
+  min-height: 25px;
   gap: 7px;
 }
 
-.counter,
-.shortcut {
-  color: var(--faint);
+.activity {
+  min-width: 0;
+  gap: 6px;
+  color: var(--muted);
   font-size: 9.5px;
+}
+
+.activity > i {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(75, 217, 138, 0.6);
+}
+
+.activity.busy > i {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba(123, 120, 255, 0.25);
+  border-top-color: var(--blue);
+  background: transparent;
+  box-shadow: none;
+  animation: spin 0.7s linear infinite;
+}
+
+.activity.error > i {
+  background: var(--red);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--red) 55%, transparent);
+}
+
+.activity.local > i {
+  background: var(--green);
+}
+
+.counter {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 9px;
   font-variant-numeric: tabular-nums;
 }
 
-.shortcut {
-  display: flex;
-  gap: 3px;
-}
-
-kbd {
-  display: grid;
-  min-width: 19px;
-  height: 18px;
-  place-items: center;
-  padding: 0 4px;
-  border: 1px solid var(--hair);
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.045);
-  color: var(--muted);
-  font: 9px/1 -apple-system, BlinkMacSystemFont, sans-serif;
-  box-shadow: inset 0 1px 0 var(--edge);
-}
-
 .clear-button {
-  margin-left: auto;
-  padding: 5px 7px;
-  background: transparent;
+  gap: 3px;
+  padding: 4px 4px 4px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 9.5px;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-.clear-button:hover {
+.clear-button[hidden] {
+  display: none;
+}
+
+.clear-button:hover,
+.clear-button:focus-visible {
+  background: rgba(255, 255, 255, 0.09);
   color: var(--text);
+  outline: none;
 }
 
-.translate-button {
-  justify-content: center;
-  gap: 6px;
-  min-width: 106px;
-  height: 33px;
-  padding: 0 11px 0 13px;
-  border-radius: 11px;
-  background: var(--gradient);
-  color: white;
-  font-size: 11px;
-  font-weight: 680;
-  box-shadow: 0 7px 22px rgba(70, 83, 230, 0.28);
-  transition: transform 0.14s ease, filter 0.14s ease, opacity 0.14s ease;
-}
-
-.translate-button:hover:not(:disabled) {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
-}
-
-.translate-button:active:not(:disabled) {
-  transform: scale(0.97);
-}
-
-.translate-button:disabled {
-  cursor: default;
-  filter: saturate(0.35);
-  opacity: 0.45;
-}
-
-.translate-button svg {
-  width: 15px;
+.clear-button svg {
+  width: 13px;
+  height: 13px;
+  padding: 2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.07);
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.65;
-}
-
-.spinner {
-  display: none;
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid rgba(255, 255, 255, 0.35);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.75s linear infinite;
-}
-
-.translate-button.busy {
-  background: var(--panel-strong);
-  box-shadow: inset 0 0 0 1px var(--hair);
-}
-
-.translate-button.busy svg {
-  display: none;
-}
-
-.translate-button.busy .spinner {
-  display: block;
+  stroke-width: 1.35;
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .message {
-  padding: 8px 11px;
+  padding: 8px 10px;
   border: 1px solid var(--hair);
-  border-radius: 11px;
+  border-radius: 17px;
   background: rgba(255, 255, 255, 0.035);
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 11px;
 }
 
 .message[hidden] {
@@ -455,21 +448,21 @@ kbd {
 }
 
 .message.error {
-  border-color: color-mix(in srgb, var(--red) 25%, transparent);
-  background: color-mix(in srgb, var(--red) 7%, transparent);
+  border-color: color-mix(in srgb, var(--red) 22%, transparent);
+  background: color-mix(in srgb, var(--red) 6%, transparent);
   color: var(--red);
 }
 
 .message.local {
-  border-color: color-mix(in srgb, var(--green) 23%, transparent);
-  background: color-mix(in srgb, var(--green) 6%, transparent);
+  border-color: color-mix(in srgb, var(--green) 20%, transparent);
+  background: color-mix(in srgb, var(--green) 5%, transparent);
   color: color-mix(in srgb, var(--green) 78%, var(--text));
 }
 
 .result {
-  min-height: 92px;
-  padding: 12px 13px 13px;
-  animation: reveal 0.23s cubic-bezier(0.21, 1.02, 0.36, 1);
+  min-height: 84px;
+  padding: 11px 12px 12px;
+  animation: reveal 0.22s cubic-bezier(0.2, 0.9, 0.28, 1.08);
 }
 
 .result[hidden] {
@@ -478,31 +471,45 @@ kbd {
 
 .result.reference {
   background:
-    linear-gradient(color-mix(in srgb, var(--amber) 5%, var(--panel)), color-mix(in srgb, var(--amber) 5%, var(--panel))) padding-box,
-    linear-gradient(135deg, rgba(255, 179, 64, 0.62), rgba(255, 214, 84, 0.16), rgba(255, 110, 82, 0.34)) border-box;
+    linear-gradient(
+        color-mix(in srgb, var(--amber) 5%, var(--panel)),
+        color-mix(in srgb, var(--amber) 5%, var(--panel))
+      )
+      padding-box,
+    linear-gradient(145deg, rgba(255, 181, 71, 0.55), rgba(255, 218, 118, 0.14), rgba(255, 118, 88, 0.3))
+      border-box;
 }
 
 @keyframes reveal {
-  from { opacity: 0; transform: translateY(5px) scale(0.99); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .result-head {
-  min-height: 24px;
+  min-height: 22px;
 }
 
 .copy-button {
   gap: 4px;
   padding: 4px 6px;
-  border-radius: 7px;
+  border-radius: 999px;
   background: transparent;
   color: var(--muted);
   font-size: 9.5px;
 }
 
-.copy-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.05);
+.copy-button:hover:not(:disabled),
+.copy-button:focus-visible:not(:disabled) {
+  background: rgba(255, 255, 255, 0.055);
   color: var(--text);
+  outline: none;
 }
 
 .copy-button:disabled {
@@ -524,8 +531,8 @@ kbd {
 }
 
 .result-body {
-  max-height: 230px;
-  margin-top: 7px;
+  max-height: 210px;
+  margin-top: 6px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -539,20 +546,20 @@ kbd {
 }
 
 .translation-text {
-  font-size: 14.5px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.52;
 }
 
 .detail {
-  margin-top: 9px;
-  padding-top: 8px;
+  margin-top: 8px;
+  padding-top: 7px;
   border-top: 1px solid var(--hair);
 }
 
 .detail-label {
   margin-bottom: 3px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -561,8 +568,8 @@ kbd {
 .detail-text {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11.5px;
+  line-height: 1.48;
 }
 
 .reference-category,
@@ -571,59 +578,46 @@ kbd {
   width: fit-content;
   padding: 3px 7px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--amber) 13%, transparent);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
   color: var(--amber);
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 720;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .reference-title {
-  margin-top: 8px;
-  font-size: 15px;
+  margin-top: 7px;
+  font-size: 14.5px;
   font-weight: 670;
 }
 
 .reference-note {
-  margin: 3px 0 0;
+  margin: 2px 0 0;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 10px;
 }
 
 .segment + .segment {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 9px;
+  padding-top: 9px;
   border-top: 1px solid var(--hair);
 }
 
 .segment-language {
   margin-bottom: 5px;
-  background: color-mix(in srgb, var(--indigo) 14%, transparent);
-  color: var(--cyan);
+  background: color-mix(in srgb, var(--indigo) 13%, transparent);
+  color: var(--blue);
 }
 
 .segment-language.kept {
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--muted);
 }
 
 .segment-text {
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.foot {
-  align-self: end;
-  justify-content: space-between;
-  min-height: 18px;
-  padding: 0 3px;
-  color: var(--faint);
-  font-size: 9.5px;
-}
-
-.privacy {
-  letter-spacing: 0.02em;
+  font-size: 12.5px;
+  line-height: 1.48;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -632,7 +626,6 @@ kbd {
   *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
