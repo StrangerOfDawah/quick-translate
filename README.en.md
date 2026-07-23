@@ -87,6 +87,14 @@ The artifact is retained for 14 days and contains no API keys or user settings. 
 
 <br>
 
+## Development and AI agents
+
+Before changing the project, read the [AI agent instructions](AGENTS.md), [architecture](docs/ARCHITECTURE.md), [recorded decisions](docs/DECISIONS.md), and [product direction](docs/PRODUCT_DIRECTION.md). Every feature and bug fix must include an automated test, and affected Markdown files must be updated in the same PR.
+
+Release history is in [CHANGELOG.md](CHANGELOG.md); the publication checklist is in [docs/RELEASING.md](docs/RELEASING.md).
+
+<br>
+
 ## OpenAI key
 
 You need an OpenAI API key. This is **not** a ChatGPT Plus subscription — that gives no programmatic access. The API is billed separately, per use.
