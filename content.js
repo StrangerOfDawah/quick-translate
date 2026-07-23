@@ -1,6 +1,32 @@
 (() => {
   // Скрипт может быть внедрён повторно из background — второй раз не выполняемся.
   if (window.__gptTranslateLoaded) return;
+
+  const parseWordResponse = globalThis.SensemarkWordResponse?.parse;
+  const parseTextResponse = globalThis.SensemarkTextResponse?.parse;
+  const isRussianOnly = globalThis.SensemarkLanguageDetection?.isRussianOnly;
+  const detectScripts = globalThis.SensemarkLanguageDetection?.detectScripts;
+  const hasMultipleScripts = globalThis.SensemarkLanguageDetection?.hasMultipleScripts;
+  const alternativeWord = globalThis.SensemarkSelectionText?.alternativeWord;
+  const isQuranGlyphFont = globalThis.SensemarkSelectionText?.isQuranGlyphFont;
+  const joinSelectionParts = globalThis.SensemarkSelectionText?.joinSelectionParts;
+  const selectArabicAlternative = globalThis.SensemarkSelectionText?.selectArabicAlternative;
+  const createScaleController = globalThis.SensemarkScale?.createScaleController;
+  if (
+    !parseWordResponse ||
+    !parseTextResponse ||
+    !isRussianOnly ||
+    !detectScripts ||
+    !hasMultipleScripts ||
+    !alternativeWord ||
+    !isQuranGlyphFont ||
+    !joinSelectionParts ||
+    !selectArabicAlternative ||
+    !createScaleController
+  ) {
+    console.error("Sensemark: response helpers are unavailable.");
+    return;
+  }
   window.__gptTranslateLoaded = true;
 
   const HOST_ID = "__gpt_translate_popup_host__";
@@ -17,14 +43,13 @@
 
   // Размеры карточки живут в storage, чтобы держаться на всех страницах.
   const VIEW_DEFAULTS = { uiScale: 1, cardWidth: 0, cardHeight: 0 };
-  const SCALE_MIN = 0.75;
-  const SCALE_MAX = 2.2;
   const WIDTH_MIN = 230; // совпадает с min-width карточки в CSS
   const HEIGHT_MIN = 120;
 
   // Держим флаги локально, чтобы не будить service worker на каждое выделение.
   let autoTranslate = false;
   let view = { ...VIEW_DEFAULTS };
+  const scaleController = createScaleController();
 
   chrome.storage.local.get({ autoTranslate: false, ...VIEW_DEFAULTS }).then((s) => {
     autoTranslate = s.autoTranslate;
@@ -99,22 +124,189 @@
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
 
-    const text = selection.toString().trim();
-    if (text.length < 2) return null;
-
     const range = selection.getRangeAt(0);
+    const rawText = selection.toString().trim();
+    const visibleText = extractVisibleRangeText(range);
+    const text = detectScripts(visibleText).length ? visibleText : rawText;
+    const selectedImages = extractSelectedImages(range);
+
     const rect = range.getBoundingClientRect();
     if (!rect || (rect.width === 0 && rect.height === 0)) return null;
 
+    // OCR не запускаем автоматически: это дорого и ненадёжно для декоративных
+    // шрифтов. Изображение без иностранного текстового слоя объясняем локально,
+    // не отправляя пустые данные и русские подписи в API.
+    const imageTextUnsupported =
+      selectedImages.length > 0 && (text.length < 2 || isRussianOnly(text));
+    if (imageTextUnsupported) {
+      return { text: "", rect, context: null, wordMode: false, sourceScripts: [], imageTextUnsupported };
+    }
+    if (text.length < 2) return null;
+
     // Для коротких фрагментов подтягиваем предложение вокруг — без него
     // многозначные слова переводятся наугад.
-    const context = isShort(text) ? extractContext(range, text) : null;
+    const wordMode = isShort(text) && !hasMultipleScripts(text);
+    const context = wordMode && text === rawText ? extractContext(range, text) : null;
 
-    return { text, rect, context };
+    return { text, rect, context, wordMode, sourceScripts: detectScripts(text) };
+  }
+
+  function extractVisibleRangeText(range) {
+    const root = range.commonAncestorContainer;
+    const textNodes = [];
+    const arabicAlternatives = new WeakMap();
+
+    if (root.nodeType === Node.TEXT_NODE) {
+      textNodes.push(root);
+    } else {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) textNodes.push(node);
+    }
+
+    const parts = [];
+    for (const node of textNodes) {
+      try {
+        if (!range.intersectsNode(node) || !isVisibleTextNode(node)) continue;
+
+        let start = 0;
+        let end = node.data.length;
+        if (node === range.startContainer) start = range.startOffset;
+        if (node === range.endContainer) end = range.endOffset;
+        const part = node.data.slice(start, end).trim();
+        if (!part) continue;
+
+        const semanticWord = semanticQuranWord(node, arabicAlternatives);
+        parts.push({
+          text: semanticWord || part,
+          noise: !semanticWord && isInterfaceTextNode(node)
+        });
+      } catch {
+        // Некоторые сложные Range на динамических страницах нельзя пересечь.
+      }
+    }
+    return joinSelectionParts(parts);
+  }
+
+  // Quran.com выводит каждое слово одним кодом шрифта code_v1/code_v2.
+  // Сам код не является буквами слова, но рядом сайт уже держит скрытую
+  // Imlaei-копию с data-word-location для точного сопоставления.
+  function semanticQuranWord(node, alternatives) {
+    const glyph = node.parentElement?.closest("[data-font]");
+    if (!glyph || !isQuranGlyphFont(glyph.dataset.font)) return "";
+
+    const word = glyph.closest("[data-word-location]");
+    const location = word?.dataset.wordLocation?.split(":");
+    const wordNumber = Number(location?.at(-1));
+    if (!Number.isInteger(wordNumber) || wordNumber < 1) return "";
+
+    const verseText = glyph.closest('[data-testid^="verse-arabic-"]');
+    const root = verseText?.parentElement;
+    if (!root) return "";
+
+    let alternative = alternatives.get(root);
+    if (alternative === undefined) {
+      const candidates = [];
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let candidateNode;
+      while ((candidateNode = walker.nextNode())) {
+        const value = candidateNode.data.trim();
+        if (
+          value &&
+          /\p{Script=Arabic}/u.test(value) &&
+          !candidateNode.parentElement?.closest("[data-font]") &&
+          !isVisibleTextNode(candidateNode)
+        ) {
+          candidates.push(value);
+        }
+      }
+
+      const expectedWords = root.querySelectorAll(
+        '[data-word-location] [data-font^="code_v"]'
+      ).length;
+      alternative = selectArabicAlternative(candidates, expectedWords);
+      alternatives.set(root, alternative);
+    }
+
+    return alternativeWord(alternative, wordNumber);
+  }
+
+  function isInterfaceTextNode(node) {
+    const element = node.parentElement;
+    if (!element) return false;
+    return Boolean(
+      element.closest(
+        "a, button, input, select, textarea, option, summary, sup, " +
+          '[role="button"], [role="menuitem"], [role="tooltip"], [role="dialog"]'
+      )
+    );
+  }
+
+  function extractSelectedImages(range) {
+    const root =
+      range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? range.commonAncestorContainer
+        : range.commonAncestorContainer.parentElement;
+    if (!root) return [];
+
+    const images = root.matches?.("img") ? [root] : [...root.querySelectorAll("img")];
+    return images.filter((image) => {
+      try {
+        if (!range.intersectsNode(image) || !isVisibleElement(image)) return false;
+        const rect = image.getBoundingClientRect();
+        return rect.width >= 12 && rect.height >= 12;
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  function isVisibleElement(element) {
+    let current = element;
+    while (current && current !== document.documentElement) {
+      const style = getComputedStyle(current);
+      const rect = current.getBoundingClientRect();
+      if (
+        current.hidden ||
+        current.inert ||
+        current.getAttribute("aria-hidden") === "true" ||
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.visibility === "collapse" ||
+        Number(style.opacity) === 0 ||
+        style.clipPath === "inset(50%)" ||
+        (style.position === "absolute" &&
+          style.overflow === "hidden" &&
+          rect.width <= 1 &&
+          rect.height <= 1)
+      ) {
+        return false;
+      }
+      current = current.parentElement;
+    }
+    return true;
+  }
+
+  function isVisibleTextNode(node) {
+    if (!node.parentElement || !isVisibleElement(node.parentElement)) return false;
+
+    const probe = document.createRange();
+    probe.selectNodeContents(node);
+    return [...probe.getClientRects()].some((rect) => rect.width > 1 && rect.height > 1);
   }
 
   function isShort(text) {
     return text.length <= 40 && text.split(/\s+/).length <= 3;
+  }
+
+  async function shouldIgnoreSelection(text) {
+    let detection = null;
+    try {
+      detection = await chrome.i18n?.detectLanguage?.(text);
+    } catch {
+      // Локальный CLD может не дать результат для очень короткого текста.
+    }
+    return isRussianOnly(text, detection);
   }
 
   // Ближайший блочный предок — за его границы предложение не выходит.
@@ -179,6 +371,20 @@
     const info = getSelectionInfo();
     if (!info) return; // в этом фрейме выделения нет — молчим
 
+    if (info.imageTextUnsupported) {
+      ++requestId;
+      currentPort?.disconnect();
+      currentPort = null;
+      render(info.rect, {
+        state: "error",
+        message:
+          "Выделенный фрагмент нарисован как изображение, а не как текст. " +
+          "Sensemark не отправил его в API, чтобы не тратить токены. " +
+          "Выделите доступную текстовую подпись или перевод."
+      });
+      return;
+    }
+
     if (info.text.length > MAX_CHARS) {
       render(info.rect, {
         state: "error",
@@ -188,10 +394,23 @@
     }
 
     const id = ++requestId;
-    render(info.rect, { state: "loading" });
+    currentPort?.disconnect();
+    currentPort = null;
+
+    // Русский текст уже является результатом перевода: не показываем карточку
+    // и не отправляем лишний запрос в OpenAI.
+    if (await shouldIgnoreSelection(info.text)) {
+      if (id !== requestId) return;
+      if (host) close();
+      return;
+    }
+    if (id !== requestId) return;
+
+    // Старый результат убираем сразу, но пустую карточку для нового запроса не
+    // создаём. Она появится только вместе с первым содержательным фрагментом.
+    if (host) close({ cancelRequest: false, animate: false });
 
     // Стриминг: перевод печатается по мере генерации, не дожидаясь всего ответа.
-    currentPort?.disconnect();
     let port;
     try {
       port = chrome.runtime.connect({ name: "translate" });
@@ -212,8 +431,19 @@
       if (id !== requestId) return;
 
       if (message.type === "chunk" || message.type === "done") {
+        if (!started && !hasVisibleStreamContent(message.text, info.wordMode)) {
+          if (message.type === "done") {
+            render(info.rect, {
+              state: "error",
+              message: "Не удалось получить перевод — попробуйте ещё раз."
+            });
+            release();
+            port.disconnect();
+          }
+          return;
+        }
         if (!started) {
-          beginStreamCard(info.text, Boolean(info.context));
+          beginStreamCard(info.rect, info.text, info.wordMode);
           started = true;
         }
         updateStream(message.text);
@@ -237,7 +467,13 @@
       render(info.rect, { state: "error", message: "Соединение прервано — попробуйте ещё раз." });
     });
 
-    port.postMessage({ type: "start", text: info.text, context: info.context });
+    port.postMessage({
+      type: "start",
+      text: info.text,
+      context: info.context,
+      wordMode: info.wordMode,
+      sourceScripts: info.sourceScripts
+    });
   }
 
   const ICONS = {
@@ -303,7 +539,10 @@
         .card.in {
           opacity: 1;
           animation: pop 0.34s cubic-bezier(0.21, 1.02, 0.36, 1);
-          transition: top 0.28s cubic-bezier(0.32, 0.72, 0, 1), left 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+          transition:
+            top 0.28s cubic-bezier(0.32, 0.72, 0, 1),
+            left 0.28s cubic-bezier(0.32, 0.72, 0, 1),
+            font-size 0.09s ease-out;
         }
         .card.out {
           opacity: 0;
@@ -334,6 +573,29 @@
           }
         }
 
+        .card.reference {
+          --accent: #d97706;
+          background:
+            linear-gradient(rgba(255, 251, 242, 0.88), rgba(255, 251, 242, 0.88)) padding-box,
+            linear-gradient(135deg, rgba(255, 159, 10, 0.72), rgba(255, 214, 10, 0.34) 55%, rgba(255, 107, 64, 0.42)) border-box;
+          box-shadow:
+            0 1px 2px rgba(0, 0, 0, 0.06),
+            0 12px 44px rgba(0, 0, 0, 0.2),
+            0 0 34px rgba(255, 159, 10, 0.16);
+        }
+        @media (prefers-color-scheme: dark) {
+          .card.reference {
+            --accent: #ff9f0a;
+            background:
+              linear-gradient(rgba(30, 27, 20, 0.82), rgba(30, 27, 20, 0.82)) padding-box,
+              linear-gradient(135deg, rgba(255, 159, 10, 0.8), rgba(255, 214, 10, 0.38) 55%, rgba(255, 107, 64, 0.5)) border-box;
+            box-shadow:
+              0 1px 2px rgba(0, 0, 0, 0.32),
+              0 12px 44px rgba(0, 0, 0, 0.5),
+              0 0 38px rgba(255, 159, 10, 0.14);
+          }
+        }
+
         .hd {
           display: flex;
           align-items: center;
@@ -360,6 +622,12 @@
           box-shadow: 0 0 9px rgba(100, 210, 255, 0.9);
           flex: none;
         }
+        .card.reference .badge { color: var(--accent); }
+        .card.multilingual .badge { color: var(--accent); }
+        .card.reference .badge::before {
+          background: linear-gradient(135deg, #ffd60a, #ff7a00);
+          box-shadow: 0 0 10px rgba(255, 159, 10, 0.75);
+        }
         .sp { flex: 1; }
 
         .bd {
@@ -385,21 +653,61 @@
           -webkit-user-select: text;
           cursor: text;
         }
-
-        .sk {
-          height: 0.79em;
-          border-radius: 6px;
-          margin: 0.43em 0 0.57em;
-          background: linear-gradient(90deg,
-            rgba(100, 210, 255, 0.12) 20%,
-            rgba(94, 92, 230, 0.28) 45%,
-            rgba(191, 90, 242, 0.16) 70%);
-          background-size: 220% 100%;
-          animation: shimmer 1.3s ease-in-out infinite;
+        .card.reference .tr {
+          font-size: 1.14em;
+          font-weight: 650;
         }
-        @keyframes shimmer {
-          from { background-position: 180% 0; }
-          to { background-position: -90% 0; }
+
+        .term-kind {
+          display: inline-flex;
+          width: fit-content;
+          margin-bottom: 0.5em;
+          padding: 0.24em 0.62em;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--accent) 14%, transparent);
+          color: var(--accent);
+          font-size: 0.72em;
+          font-weight: 700;
+          letter-spacing: 0.07em;
+          text-transform: uppercase;
+        }
+        .reference-note {
+          margin-top: 0.3em;
+          color: var(--sec);
+          font-size: 0.82em;
+        }
+
+        .segments {
+          display: grid;
+          gap: 0.86em;
+        }
+        .segment + .segment {
+          padding-top: 0.79em;
+          border-top: 1px solid var(--hair);
+        }
+        .segment-lang {
+          display: inline-flex;
+          width: fit-content;
+          margin-bottom: 0.36em;
+          padding: 0.22em 0.58em;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--accent) 12%, transparent);
+          color: var(--accent);
+          font-size: 0.7em;
+          font-weight: 700;
+          letter-spacing: 0.055em;
+          text-transform: uppercase;
+        }
+        .segment-lang.kept {
+          background: var(--fill);
+          color: var(--sec);
+        }
+        .segment-text {
+          font-size: 1em;
+          white-space: pre-wrap;
+          overflow-wrap: break-word;
+          user-select: text;
+          -webkit-user-select: text;
         }
 
         .alt {
@@ -583,22 +891,34 @@
 
   // Cmd/Ctrl + колесо — масштаб карточки. preventDefault обязателен,
   // иначе браузер зумит всю страницу.
+  let scalePositionTimer = null;
   function setupZoom() {
+    scaleController.reset();
     card.addEventListener(
       "wheel",
       (event) => {
         if (!event.metaKey && !event.ctrlKey) return;
         event.preventDefault();
+        if (!event.deltaY) return;
 
-        const step = event.deltaY > 0 ? -0.08 : 0.08;
-        const next = Math.min(SCALE_MAX, Math.max(SCALE_MIN, view.uiScale + step));
-        if (next === view.uiScale) return;
+        // Трекпад отправляет десятки wheel-событий за одно движение. Раньше
+        // каждое из них меняло масштаб сразу на 8%, поэтому карточка улетала.
+        // Принимаем не чаще одного небольшого шага за интервал.
+        const change = scaleController.next(view.uiScale, event.deltaY, performance.now());
+        if (!change.changed) return;
 
-        view.uiScale = Math.round(next * 100) / 100;
+        view.uiScale = change.value;
         applyView();
         showZoom();
         saveView();
-        if (lastRect) position(lastRect);
+
+        // Во время жеста сохраняем верхний левый угол стабильным. После паузы
+        // мягко возвращаем карточку к выделению и внутрь границ экрана.
+        clearTimeout(scalePositionTimer);
+        scalePositionTimer = setTimeout(() => {
+          scalePositionTimer = null;
+          if (host && lastRect) position(lastRect);
+        }, 180);
       },
       { passive: false }
     );
@@ -664,15 +984,25 @@
     });
   }
 
+  function setCardPresentation(mode) {
+    const reference = mode === "reference";
+    const multilingual = mode === "multilingual";
+    card.classList.toggle("reference", reference);
+    card.classList.toggle("multilingual", multilingual);
+    card.setAttribute(
+      "aria-label",
+      reference ? "Объяснение фрагмента" : multilingual ? "Перевод с нескольких языков" : "Перевод"
+    );
+    const badge = shadow.querySelector(".badge");
+    if (badge) badge.textContent = reference ? "Объяснение" : multilingual ? "Несколько языков" : "Перевод";
+  }
+
   function render(rect, payload) {
     ensureHost();
     lastRect = rect;
+    setCardPresentation("translation");
 
-    if (payload.state === "loading") {
-      bodyEl.innerHTML = `
-        <div class="sk" style="width: 94%"></div>
-        <div class="sk" style="width: 62%"></div>`;
-    } else if (payload.state === "error") {
+    if (payload.state === "error") {
       bodyEl.innerHTML = `
         <div class="err">${ICONS.warn}<p class="err-t"></p></div>
         <div class="acts"><span class="sp"></span><button class="chip accent" data-act="options">Открыть настройки</button></div>`;
@@ -692,11 +1022,17 @@
 
   // Каркас карточки для стриминга: текст пишется в .live, действия скрыты до конца.
   // wordMode — только для коротких фрагментов: там модель отдаёт перевод первой
-  // строкой и прочие значения второй. У обычного текста переносы строк — это
-  // просто абзацы, и разбирать их как «другие значения» нельзя.
-  function beginStreamCard(source, wordMode) {
+  // строкой, а ниже — другие значения или объяснение несловарного фрагмента.
+  // У обычного текста переносы строк — это просто абзацы, и разбирать их нельзя.
+  function beginStreamCard(rect, source, wordMode) {
+    ensureHost();
+    lastRect = rect;
+    setCardPresentation("translation");
     bodyEl.innerHTML = `
+      <div class="term-kind" hidden></div>
       <p class="tr"><span class="live"></span><span class="caret"></span></p>
+      <div class="segments" hidden></div>
+      <p class="reference-note" hidden>Не переводится как обычное слово</p>
       <div class="alt" hidden><div class="cap">Другие значения</div><p class="alt-t"></p></div>
       <div class="src"><p class="src-t"></p></div>
       <div class="acts pending">
@@ -705,15 +1041,23 @@
         <button class="icon-btn" data-act="copy" title="Скопировать">${ICONS.copy}</button>
       </div>`;
 
-    streamState = {
+    const state = {
       main: "",
+      copyText: "",
+      source: source || "",
       wordMode,
+      termKind: bodyEl.querySelector(".term-kind"),
+      mainEl: bodyEl.querySelector(".tr"),
       live: bodyEl.querySelector(".live"),
       caret: bodyEl.querySelector(".caret"),
+      segments: bodyEl.querySelector(".segments"),
+      referenceNote: bodyEl.querySelector(".reference-note"),
       alt: bodyEl.querySelector(".alt"),
+      altCap: bodyEl.querySelector(".alt .cap"),
       altT: bodyEl.querySelector(".alt-t"),
       acts: bodyEl.querySelector(".acts")
     };
+    streamState = state;
 
     const src = bodyEl.querySelector(".src");
     src.querySelector(".src-t").textContent = source || "";
@@ -730,7 +1074,7 @@
 
     const copyBtn = bodyEl.querySelector("[data-act=copy]");
     copyBtn.addEventListener("click", async () => {
-      const ok = await copyText(streamState.main);
+      const ok = await copyText(state.copyText || state.main);
       copyBtn.classList.toggle("ok", ok);
       copyBtn.innerHTML = ok ? ICONS.check : ICONS.copy;
       setTimeout(() => {
@@ -740,26 +1084,118 @@
     });
   }
 
+  function hasVisibleStreamContent(text, wordMode) {
+    if (!wordMode) {
+      const parsed = parseTextResponse(text);
+      if (parsed.mode === "pending" || parsed.mode === "skip") return false;
+      if (parsed.mode === "multilingual") {
+        return parsed.sections.some((section) => Boolean(section.text));
+      }
+      return Boolean(parsed.text);
+    }
+
+    const parsed = parseWordResponse(text);
+    if (parsed.mode === "pending" || parsed.mode === "skip") return false;
+    if (parsed.mode === "reference") {
+      const content = String(text || "")
+        .split("\n")
+        .slice(1)
+        .join("\n")
+        .trim();
+      return Boolean(content);
+    }
+    return Boolean(parsed.main);
+  }
+
   function updateStream(text) {
     if (!streamState) return;
 
     if (!streamState.wordMode) {
-      // Обычный текст показываем как есть — переносы строк это абзацы оригинала.
-      streamState.main = text;
-      streamState.live.textContent = text;
+      const parsed = parseTextResponse(text);
+      if (parsed.mode === "pending") return;
+      // [[skip]] — ошибочный ответ модели: background автоматически запросит
+      // исправление. Метку пользователю не показываем.
+      if (parsed.mode === "skip") return;
+
+      if (parsed.mode === "multilingual") {
+        setCardPresentation("multilingual");
+        streamState.mainEl.hidden = true;
+        streamState.segments.hidden = false;
+        renderLanguageSections(streamState, parsed.sections);
+        return;
+      }
+
+      // Обычный перевод показываем как есть — переносы строк это абзацы.
+      setCardPresentation("translation");
+      streamState.mainEl.hidden = false;
+      streamState.segments.hidden = true;
+      streamState.main = parsed.text;
+      streamState.copyText = parsed.text;
+      streamState.live.textContent = parsed.text;
+      streamState.live.after(streamState.caret);
       return;
     }
 
-    // Для слов модель возвращает перевод первой строкой, прочие значения — ниже.
-    const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
-    streamState.main = lines[0] || "";
-    streamState.live.textContent = streamState.main;
+    const parsed = parseWordResponse(text);
+    if (parsed.mode === "pending" || parsed.mode === "skip") return;
 
-    const alt = lines.slice(1).join(" ").replace(/^друг\S*\s+значения\s*:\s*/i, "");
-    if (alt) {
+    if (parsed.mode === "reference") {
+      setCardPresentation("reference");
+      streamState.termKind.hidden = false;
+      streamState.termKind.textContent = parsed.category || "Неизвестный термин";
+      streamState.live.textContent = streamState.source;
+      streamState.referenceNote.hidden = false;
+      streamState.referenceNote.textContent = /опечат|неизвест/i.test(parsed.category)
+        ? "Словарное значение не найдено"
+        : `Использовано как ${parsed.category || "имя или название"} — перевод не требуется`;
       streamState.alt.hidden = false;
-      streamState.altT.textContent = alt;
+      streamState.altCap.textContent = parsed.detailLabel || "Что это может быть";
+      streamState.altT.textContent = parsed.detail;
+      streamState.altT.appendChild(streamState.caret);
+      streamState.main = streamState.source;
+      streamState.copyText = [streamState.source, parsed.detail].filter(Boolean).join("\n");
+      return;
     }
+
+    setCardPresentation("translation");
+    streamState.termKind.hidden = true;
+    streamState.referenceNote.hidden = true;
+    streamState.main = parsed.main;
+    streamState.copyText = parsed.main;
+    streamState.live.textContent = parsed.main;
+    streamState.live.after(streamState.caret);
+    streamState.alt.hidden = !parsed.detail;
+    streamState.altCap.textContent = parsed.detailLabel || "Другие значения";
+    streamState.altT.textContent = parsed.detail;
+  }
+
+  function renderLanguageSections(state, sections) {
+    state.segments.textContent = "";
+    let lastText = null;
+
+    for (const section of sections) {
+      const item = document.createElement("section");
+      item.className = "segment";
+
+      const language = document.createElement("div");
+      const isRussian = /^русск/i.test(section.language);
+      language.className = `segment-lang${isRussian ? " kept" : ""}`;
+      language.textContent = isRussian
+        ? `${section.language} · без изменений`
+        : `${section.language} → русский`;
+
+      const translated = document.createElement("p");
+      translated.className = "segment-text";
+      translated.textContent = section.text;
+      item.append(language, translated);
+      state.segments.appendChild(item);
+      lastText = translated;
+    }
+
+    (lastText || state.segments).appendChild(state.caret);
+    const combined = sections.map((section) => section.text).filter(Boolean).join("\n\n");
+    state.main = combined;
+    state.copyText = combined;
   }
 
   function finalizeStream() {
@@ -810,11 +1246,15 @@
     });
   }
 
-  function close() {
+  function close({ cancelRequest = true, animate = true } = {}) {
     if (!host) return;
-    requestId++; // отменяем ответ на текущий запрос
-    currentPort?.disconnect(); // background оборвёт fetch и не будет жечь токены
-    currentPort = null;
+    clearTimeout(scalePositionTimer);
+    scalePositionTimer = null;
+    if (cancelRequest) {
+      requestId++; // отменяем ответ на текущий запрос
+      currentPort?.disconnect(); // background оборвёт fetch и не будет жечь токены
+      currentPort = null;
+    }
     streamState = null;
 
     document.removeEventListener("mousedown", onOutsideClick, true);
@@ -822,8 +1262,12 @@
     window.removeEventListener("resize", close);
 
     const dying = host;
-    card.classList.add("out");
-    setTimeout(() => dying.remove(), 170);
+    if (animate) {
+      card.classList.add("out");
+      setTimeout(() => dying.remove(), 170);
+    } else {
+      dying.remove();
+    }
 
     host = null;
     shadow = null;
