@@ -28,8 +28,6 @@ test("toolbar action opens the manual popup with only packaged scripts", () => {
   assert.ok(document.getElementById("activity"));
   assert.equal(document.getElementById("clearButton").getAttribute("aria-label"), "Очистить текст");
   assert.match(document.querySelector(".route").getAttribute("aria-label"), /автоматически/);
-  assert.equal(document.querySelector(".ambient"), null);
-  assert.equal(document.querySelector("body > main.shell"), document.querySelector(".shell"));
 
   const popupRuntime = read("popup.js");
   assert.match(popupRuntime, /insertFromPaste/);
@@ -37,16 +35,8 @@ test("toolbar action opens the manual popup with only packaged scripts", () => {
 
   const popupStyles = read("popup.css");
   assert.match(popupStyles, /--secondary-label:/);
+  assert.match(popupStyles, /border-radius:\s*28px/);
   assert.match(popupStyles, /corner-shape:\s*squircle/);
-  assert.match(popupStyles, /html,\s*body\s*{[^}]*padding:\s*0/s);
-  assert.match(popupStyles, /html,\s*body\s*{[^}]*overflow:\s*hidden/s);
-  assert.match(popupStyles, /html,\s*body\s*{[^}]*background:\s*var\(--window\)/s);
-  assert.match(popupStyles, /\.shell\s*{[^}]*width:\s*100%/s);
-  assert.match(popupStyles, /\.shell\s*{[^}]*margin:\s*0/s);
-  assert.match(popupStyles, /\.shell\s*{[^}]*border-radius:\s*0/s);
-  assert.match(popupStyles, /\.shell\s*{[^}]*box-shadow:\s*none/s);
-  assert.doesNotMatch(popupStyles, /body\s*{[^}]*padding:\s*7px/s);
-  assert.doesNotMatch(popupStyles, /\.ambient/);
   assert.match(popupStyles, /\.clear-button\[hidden\]\s*{\s*display:\s*none/);
   assert.match(popupStyles, /@media \(prefers-contrast:\s*more\)/);
   assert.match(popupStyles, /@media \(prefers-reduced-transparency:\s*reduce\)/);
