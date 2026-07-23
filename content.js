@@ -7,7 +7,21 @@
   const isRussianOnly = globalThis.SensemarkLanguageDetection?.isRussianOnly;
   const detectScripts = globalThis.SensemarkLanguageDetection?.detectScripts;
   const hasMultipleScripts = globalThis.SensemarkLanguageDetection?.hasMultipleScripts;
-  if (!parseWordResponse || !parseTextResponse || !isRussianOnly || !detectScripts || !hasMultipleScripts) {
+  const alternativeWord = globalThis.SensemarkSelectionText?.alternativeWord;
+  const isQuranGlyphFont = globalThis.SensemarkSelectionText?.isQuranGlyphFont;
+  const joinSelectionParts = globalThis.SensemarkSelectionText?.joinSelectionParts;
+  const selectArabicAlternative = globalThis.SensemarkSelectionText?.selectArabicAlternative;
+  if (
+    !parseWordResponse ||
+    !parseTextResponse ||
+    !isRussianOnly ||
+    !detectScripts ||
+    !hasMultipleScripts ||
+    !alternativeWord ||
+    !isQuranGlyphFont ||
+    !joinSelectionParts ||
+    !selectArabicAlternative
+  ) {
     console.error("Sensemark: response helpers are unavailable.");
     return;
   }
@@ -113,10 +127,20 @@
     const rawText = selection.toString().trim();
     const visibleText = extractVisibleRangeText(range);
     const text = detectScripts(visibleText).length ? visibleText : rawText;
-    if (text.length < 2) return null;
+    const selectedImages = extractSelectedImages(range);
 
     const rect = range.getBoundingClientRect();
     if (!rect || (rect.width === 0 && rect.height === 0)) return null;
+
+    // OCR не запускаем автоматически: это дорого и ненадёжно для декоративных
+    // шрифтов. Изображение без иностранного текстового слоя объясняем локально,
+    // не отправляя пустые данные и русские подписи в API.
+    const imageTextUnsupported =
+      selectedImages.length > 0 && (text.length < 2 || isRussianOnly(text));
+    if (imageTextUnsupported) {
+      return { text: "", rect, context: null, wordMode: false, sourceScripts: [], imageTextUnsupported };
+    }
+    if (text.length < 2) return null;
 
     // Для коротких фрагментов подтягиваем предложение вокруг — без него
     // многозначные слова переводятся наугад.
@@ -129,6 +153,7 @@
   function extractVisibleRangeText(range) {
     const root = range.commonAncestorContainer;
     const textNodes = [];
+    const arabicAlternatives = new WeakMap();
 
     if (root.nodeType === Node.TEXT_NODE) {
       textNodes.push(root);
@@ -148,21 +173,102 @@
         if (node === range.startContainer) start = range.startOffset;
         if (node === range.endContainer) end = range.endOffset;
         const part = node.data.slice(start, end).trim();
-        if (part) parts.push(part);
+        if (!part) continue;
+
+        const semanticWord = semanticQuranWord(node, arabicAlternatives);
+        parts.push({
+          text: semanticWord || part,
+          noise: !semanticWord && isInterfaceTextNode(node)
+        });
       } catch {
         // Некоторые сложные Range на динамических страницах нельзя пересечь.
       }
     }
-    return parts.join(" ").replace(/\s+/g, " ").trim();
+    return joinSelectionParts(parts);
   }
 
-  function isVisibleTextNode(node) {
-    let element = node.parentElement;
-    while (element && element !== document.documentElement) {
-      const style = getComputedStyle(element);
-      const rect = element.getBoundingClientRect();
+  // Quran.com выводит каждое слово одним кодом шрифта code_v1/code_v2.
+  // Сам код не является буквами слова, но рядом сайт уже держит скрытую
+  // Imlaei-копию с data-word-location для точного сопоставления.
+  function semanticQuranWord(node, alternatives) {
+    const glyph = node.parentElement?.closest("[data-font]");
+    if (!glyph || !isQuranGlyphFont(glyph.dataset.font)) return "";
+
+    const word = glyph.closest("[data-word-location]");
+    const location = word?.dataset.wordLocation?.split(":");
+    const wordNumber = Number(location?.at(-1));
+    if (!Number.isInteger(wordNumber) || wordNumber < 1) return "";
+
+    const verseText = glyph.closest('[data-testid^="verse-arabic-"]');
+    const root = verseText?.parentElement;
+    if (!root) return "";
+
+    let alternative = alternatives.get(root);
+    if (alternative === undefined) {
+      const candidates = [];
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let candidateNode;
+      while ((candidateNode = walker.nextNode())) {
+        const value = candidateNode.data.trim();
+        if (
+          value &&
+          /\p{Script=Arabic}/u.test(value) &&
+          !candidateNode.parentElement?.closest("[data-font]") &&
+          !isVisibleTextNode(candidateNode)
+        ) {
+          candidates.push(value);
+        }
+      }
+
+      const expectedWords = root.querySelectorAll(
+        '[data-word-location] [data-font^="code_v"]'
+      ).length;
+      alternative = selectArabicAlternative(candidates, expectedWords);
+      alternatives.set(root, alternative);
+    }
+
+    return alternativeWord(alternative, wordNumber);
+  }
+
+  function isInterfaceTextNode(node) {
+    const element = node.parentElement;
+    if (!element) return false;
+    return Boolean(
+      element.closest(
+        "a, button, input, select, textarea, option, summary, sup, " +
+          '[role="button"], [role="menuitem"], [role="tooltip"], [role="dialog"]'
+      )
+    );
+  }
+
+  function extractSelectedImages(range) {
+    const root =
+      range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? range.commonAncestorContainer
+        : range.commonAncestorContainer.parentElement;
+    if (!root) return [];
+
+    const images = root.matches?.("img") ? [root] : [...root.querySelectorAll("img")];
+    return images.filter((image) => {
+      try {
+        if (!range.intersectsNode(image) || !isVisibleElement(image)) return false;
+        const rect = image.getBoundingClientRect();
+        return rect.width >= 12 && rect.height >= 12;
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  function isVisibleElement(element) {
+    let current = element;
+    while (current && current !== document.documentElement) {
+      const style = getComputedStyle(current);
+      const rect = current.getBoundingClientRect();
       if (
-        element.hidden ||
+        current.hidden ||
+        current.inert ||
+        current.getAttribute("aria-hidden") === "true" ||
         style.display === "none" ||
         style.visibility === "hidden" ||
         style.visibility === "collapse" ||
@@ -175,8 +281,13 @@
       ) {
         return false;
       }
-      element = element.parentElement;
+      current = current.parentElement;
     }
+    return true;
+  }
+
+  function isVisibleTextNode(node) {
+    if (!node.parentElement || !isVisibleElement(node.parentElement)) return false;
 
     const probe = document.createRange();
     probe.selectNodeContents(node);
@@ -258,6 +369,20 @@
   async function handleSelection() {
     const info = getSelectionInfo();
     if (!info) return; // в этом фрейме выделения нет — молчим
+
+    if (info.imageTextUnsupported) {
+      ++requestId;
+      currentPort?.disconnect();
+      currentPort = null;
+      render(info.rect, {
+        state: "error",
+        message:
+          "Выделенный фрагмент нарисован как изображение, а не как текст. " +
+          "Sensemark не отправил его в API, чтобы не тратить токены. " +
+          "Выделите доступную текстовую подпись или перевод."
+      });
+      return;
+    }
 
     if (info.text.length > MAX_CHARS) {
       render(info.rect, {

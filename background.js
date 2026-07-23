@@ -76,7 +76,13 @@ async function ping(tabId, frameId) {
           frameId === undefined
             ? { tabId, allFrames: true }
             : { tabId, frameIds: [frameId] },
-        files: ["language-detection.js", "word-response.js", "text-response.js", "content.js"]
+        files: [
+          "language-detection.js",
+          "selection-text.js",
+          "word-response.js",
+          "text-response.js",
+          "content.js"
+        ]
       });
       await chrome.tabs.sendMessage(tabId, message, options);
     } catch {

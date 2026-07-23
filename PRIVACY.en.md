@@ -2,7 +2,7 @@
 
 [Русский](PRIVACY.md)
 
-**Effective date:** July 22, 2026
+**Effective date:** July 23, 2026
 
 This policy applies to the **Sensemark** Chrome extension (the “Extension”). The Extension is an independent open-source project and is not affiliated with or endorsed by OpenAI.
 
@@ -15,6 +15,8 @@ The Extension handles only the data needed to translate text:
 - the user's OpenAI API key;
 - local preferences such as the selected model, automatic translation setting, and card size;
 - the user's consent status for sending text to OpenAI.
+
+Before transmission, the Extension locally removes hidden duplicates and interface elements from the selection. If a site renders text with page-font glyphs but provides a semantic text copy beside them, the cleaned text copy is included in the request. Images, screenshots, and page pixels are not sent to OpenAI.
 
 ## How the data is used and shared
 

@@ -20,6 +20,7 @@ zip -q -r "$ARCHIVE" \
   manifest.json \
   background.js \
   language-detection.js \
+  selection-text.js \
   word-response.js \
   text-response.js \
   content.js \

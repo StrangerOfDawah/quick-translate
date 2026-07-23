@@ -16,6 +16,8 @@
 
 A Russian-only selection is ignored without opening the card or calling the API. When one selection mixes Russian, English, Arabic, or other languages, Russian fragments stay unchanged while the remaining fragments are translated and displayed in separate source-language sections.
 
+Before a request, Sensemark locally removes hidden duplicates, controls, interface labels, and Unicode direction markers. On Quran.com, page-font glyph codes are replaced with the simple Arabic copy already embedded in the page. The model receives real text rather than visual codes, and DOM noise does not waste tokens.
+
 <br>
 
 ## No waiting for the translation
@@ -109,6 +111,7 @@ You can rebind the shortcut at `chrome://extensions/shortcuts`. If it doesn't wo
 | `manifest.json` | Manifest, permissions, keyboard shortcut |
 | `background.js` | Service worker: context menu, OpenAI streaming, translation cache |
 | `language-detection.js` | Local check for whether the selected text needs translation |
+| `selection-text.js` | Selection cleanup and semantic recovery for page-font glyphs |
 | `word-response.js` | Word-response parser: regular translation or name/title explanation |
 | `text-response.js` | Parser for regular and sectioned multilingual translations |
 | `content.js` | On-page card, context extraction, scale and size |
@@ -119,11 +122,14 @@ The key is stored in `chrome.storage.local`. Selected text and, for a short sele
 
 Repeat translations of the same fragment come from an in-memory cache in the service worker (last 200) and cost nothing. Selections are capped at 5000 characters so an accidental <kbd>⌘</kbd><kbd>A</kbd> doesn't send a whole page to the API.
 
+If a selection exists only as an image and the page provides no foreign-language text layer, Sensemark shows a local message and sends nothing to the API. Automatic OCR is intentionally avoided because it would add cost and could corrupt decorative or Quranic text.
+
 <br>
 
 ## Limitations
 
 - Works only where Chrome lets extensions run scripts: the card won't appear on `chrome://` pages, the Chrome Web Store, or other extensions' pages
+- Text inside a PNG, photograph, or canvas cannot be translated through a normal text selection; the extension does not upload such images and asks the user to select an available text label
 - The target language is fixed to Russian on purpose — the value goes straight into the system prompt, so there's no free-text field
 - After editing the code, press Reload on the extension card in `chrome://extensions` and refresh open tabs
 

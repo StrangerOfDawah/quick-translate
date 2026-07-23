@@ -60,6 +60,8 @@
         <button data-case="reference">Объяснение названия</button>
         <button data-case="multilingual">Несколько языков</button>
         <button data-case="hidden">Скрытый текст</button>
+        <button data-case="quran-glyph">Глифы Quran.com</button>
+        <button data-case="image-text">Текст-картинка</button>
         <button data-case="russian">Только русский</button>
       </div>
 
@@ -69,12 +71,41 @@
       <p class="sample">
         <mark id="hidden">Come Close to Allah.<span class="hidden-copy">اقترب من الله.</span></mark>
       </p>
+      <div class="sample" id="quran-glyph">
+        <div class="hidden-copy">
+          <div>تبارك الذي بيده الملك وهو على كل شيء قدير ١</div>
+          <div>تَبَـٰرَكَ ٱلَّذِى بِيَدِهِ ٱلْمُلْكُ وَهُوَ عَلَىٰ كُلِّ شَىْءٍۢ قَدِيرٌ ١</div>
+        </div>
+        <div data-testid="verse-arabic-67:1">
+          <span data-word-location="67:1:1"><span data-font="code_v2">ﱁ</span></span>
+          <span data-word-location="67:1:2"><span data-font="code_v2">ﱂ</span></span>
+          <span data-word-location="67:1:3"><span data-font="code_v2">ﱃ</span></span>
+          <span data-word-location="67:1:4"><span data-font="code_v2">ﱄ</span></span>
+          <span data-word-location="67:1:5"><span data-font="code_v2">ﱅ</span></span>
+          <span data-word-location="67:1:6"><span data-font="code_v2">ﱆ</span></span>
+          <span data-word-location="67:1:7"><span data-font="code_v2">ﱇ</span></span>
+          <span data-word-location="67:1:8"><span data-font="code_v2">ﱈ</span></span>
+          <span data-word-location="67:1:9"><span data-font="code_v2">ﱉ</span></span>
+          <span data-word-location="67:1:10"><span data-font="code_v2">ﱊ</span></span>
+        </div>
+      </div>
+      <div class="sample" id="image-text">
+        <img
+          width="80"
+          height="40"
+          alt="Благословен"
+          src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40'%3E%3Crect width='80' height='40' fill='%2338547d'/%3E%3C/svg%3E"
+        />
+        <span>Благословен</span>
+      </div>
       <p class="sample"><mark id="russian">Этот текст уже написан на русском языке.</mark></p>
     </main>
 
     <script>
       let runtimeListener = null;
       let previewResponse = "";
+      window.lastPreviewRequest = null;
+      window.previewRequestCount = 0;
 
       const eventStub = () => ({ addListener() {} });
       window.chrome = {
@@ -106,7 +137,13 @@
               onDisconnect: {
                 addListener(listener) { disconnectListener = listener; }
               },
-              postMessage() {
+              postMessage(payload) {
+                window.lastPreviewRequest = payload;
+                window.previewRequestCount++;
+                document.documentElement.dataset.lastPreviewText = payload.text;
+                document.documentElement.dataset.previewRequestCount = String(
+                  window.previewRequestCount
+                );
                 messageListener?.({ type: "done", text: previewResponse });
               },
               disconnect() { disconnectListener?.(); }
@@ -143,6 +180,13 @@
           selectAndTranslate(document.getElementById("russian"), "[[skip]]");
         } else if (name === "hidden") {
           selectAndTranslate(document.getElementById("hidden"), "[[text]]\nПриблизься к Аллаху.");
+        } else if (name === "quran-glyph") {
+          selectAndTranslate(
+            document.querySelector('#quran-glyph [data-testid^="verse-arabic-"]'),
+            "[[text]]\nБлагословен Тот, в Чьей руке власть, и Он способен на всякую вещь."
+          );
+        } else if (name === "image-text") {
+          selectAndTranslate(document.getElementById("image-text"), "");
         } else {
           selectAndTranslate(
             document.getElementById("why"),
@@ -152,6 +196,7 @@
       };
     </script>
     <script src="../../language-detection.js"></script>
+    <script src="../../selection-text.js"></script>
     <script src="../../word-response.js"></script>
     <script src="../../text-response.js"></script>
     <script src="../../content.js"></script>

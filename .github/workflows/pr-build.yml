@@ -29,12 +29,14 @@ jobs:
         run: |
           node --check background.js
           node --check language-detection.js
+          node --check selection-text.js
           node --check word-response.js
           node --check text-response.js
           node --check content.js
           node --check options.js
           node --test tests/background-prompts.test.js
           node --test tests/language-detection.test.js
+          node --test tests/selection-text.test.js
           node --test tests/text-response.test.js
           node --test tests/word-response.test.js
           jq empty manifest.json
